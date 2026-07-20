@@ -28,6 +28,11 @@ function errorMessage(err: unknown, fallback: string): string {
   return fallback;
 }
 
+function isDefaultPortrait(url: string): boolean {
+  const trimmed = url.trim();
+  return !trimmed || trimmed === DEFAULT_PORTRAIT;
+}
+
 const ABOUT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 const ABOUT_IMAGE_MIN_WIDTH = 800;
 const ABOUT_IMAGE_ALLOWED_TYPES = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp"]);
@@ -426,6 +431,7 @@ function AdminPage() {
                 />
                 <Field
                   label="Теги (через запятую)"
+                  polish="none"
                   value={item.tags.join(", ")}
                   onChange={(v) =>
                     set({
@@ -528,6 +534,7 @@ function AdminPage() {
                 />
                 <Field
                   label="Теги (через запятую)"
+                  polish="none"
                   value={item.tags.join(", ")}
                   onChange={(v) =>
                     set({
@@ -747,14 +754,7 @@ function VideoFileEditor({
       onChange(publicUrl);
       setInfo("Видео загружено. Не забудьте нажать «Сохранить».");
     } catch (err: unknown) {
-      const message = errorMessage(err, "Ошибка загрузки");
-      if (/BLOB_READ_WRITE_TOKEN|503|не задан/i.test(message)) {
-        setError(
-          "Хранилище Vercel Blob не настроено. В Vercel создайте Blob Store — токен BLOB_READ_WRITE_TOKEN подтянется сам.",
-        );
-      } else {
-        setError(message);
-      }
+      setError(errorMessage(err, "Ошибка загрузки"));
     } finally {
       setUploading(false);
     }
@@ -825,7 +825,7 @@ function AboutPortraitEditor({
   const [info, setInfo] = useState<string | null>(null);
 
   const displaySrc = imageUrl.trim() || DEFAULT_PORTRAIT;
-  const isCustom = Boolean(imageUrl.trim());
+  const isCustom = !isDefaultPortrait(imageUrl);
 
   async function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -868,14 +868,7 @@ function AboutPortraitEditor({
       const publicUrl = await uploadSiteMedia(file, { kind: "image", folder: "about" });
       onChange(publicUrl);
     } catch (err: unknown) {
-      const message = errorMessage(err, "Ошибка загрузки");
-      if (/BLOB_READ_WRITE_TOKEN|503|не задан/i.test(message)) {
-        setError(
-          "Хранилище Vercel Blob не настроено. В Vercel создайте Blob Store — токен BLOB_READ_WRITE_TOKEN подтянется сам.",
-        );
-      } else {
-        setError(message);
-      }
+      setError(errorMessage(err, "Ошибка загрузки"));
     } finally {
       setUploading(false);
     }
@@ -1029,14 +1022,7 @@ function VideoCoverEditor({
       const publicUrl = await uploadSiteMedia(file, { kind: "image", folder: "portfolio" });
       onChange(publicUrl);
     } catch (err: unknown) {
-      const message = errorMessage(err, "Ошибка загрузки");
-      if (/BLOB_READ_WRITE_TOKEN|503|не задан/i.test(message)) {
-        setError(
-          "Хранилище Vercel Blob не настроено. В Vercel создайте Blob Store — токен BLOB_READ_WRITE_TOKEN подтянется сам.",
-        );
-      } else {
-        setError(message);
-      }
+      setError(errorMessage(err, "Ошибка загрузки"));
     } finally {
       setUploading(false);
     }

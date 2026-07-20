@@ -24,6 +24,24 @@ function extensionFor(file: File, kind: MediaKind): string {
   return "jpg";
 }
 
+/** Map Blob/client errors to clear Russian messages for the admin UI. */
+export function formatMediaUploadError(err: unknown, fallback = "Ошибка загрузки"): string {
+  const message =
+    err instanceof Error && err.message
+      ? err.message
+      : typeof err === "object" && err && "message" in err && typeof (err as { message?: unknown }).message === "string"
+        ? ((err as { message: string }).message)
+        : fallback;
+
+  if (/BLOB_READ_WRITE_TOKEN|не задан|503/i.test(message)) {
+    return "Хранилище Vercel Blob не настроено. В Vercel создайте Blob Store — токен BLOB_READ_WRITE_TOKEN подтянется сам.";
+  }
+  if (/failed to retrieve the client token|unauthorized|forbidden|войдите/i.test(message)) {
+    return "Не удалось авторизовать загрузку. Обновите страницу и войдите в админку снова.";
+  }
+  return message || fallback;
+}
+
 /**
  * Upload media via Vercel Blob (client → Blob CDN).
  * Requires BLOB_READ_WRITE_TOKEN on the server and admin session in the browser.
@@ -36,16 +54,19 @@ export async function uploadSiteMedia(
   const ext = extensionFor(file, options.kind);
   const pathname = `${options.folder}/${Date.now()}.${ext}`;
 
-  const blob = await upload(pathname, file, {
-    access: "public",
-    handleUploadUrl: "/api/upload",
-    multipart: options.kind === "video" || file.size > 8 * 1024 * 1024,
-    contentType: file.type || undefined,
-    clientPayload: JSON.stringify({ kind: options.kind }),
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  return blob.url;
+  try {
+    const blob = await upload(pathname, file, {
+      access: "public",
+      handleUploadUrl: "/api/upload",
+      multipart: options.kind === "video" || file.size > 8 * 1024 * 1024,
+      contentType: file.type || undefined,
+      clientPayload: JSON.stringify({ kind: options.kind }),
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    return blob.url;
+  } catch (err) {
+    throw new Error(formatMediaUploadError(err));
+  }
 }
