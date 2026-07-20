@@ -8,7 +8,7 @@ import type { SiteContent } from "@/lib/site-content";
 import { cn } from "@/lib/utils";
 
 const LINKS = [
-  { href: "#about", label: "Обо мне" },
+  { href: "#about", label: "Обо\u00A0мне" },
   { href: "#services", label: "Услуги" },
   { href: "#portfolio", label: "Портфолио" },
   { href: "#experience", label: "Опыт" },

@@ -115,7 +115,7 @@ export const getPublicSiteContent = createServerFn({ method: "GET" }).handler(as
     return normalizeSiteContent(data?.data ?? DEFAULT_CONTENT);
   } catch (error) {
     console.error("[site-content] public fetch failed, using defaults:", error);
-    return DEFAULT_CONTENT;
+    return normalizeSiteContent(DEFAULT_CONTENT);
   }
 });
 
@@ -140,6 +140,7 @@ export const getAdminSiteContent = createServerFn({ method: "GET" })
 
     if (error) throw error;
 
+    // Always typography-fix on admin load (hanging prepositions, periods).
     return {
       isAdmin: true,
       content: normalizeSiteContent(data?.data ?? DEFAULT_CONTENT),
@@ -160,6 +161,7 @@ export const saveAdminSiteContent = createServerFn({ method: "POST" })
     if (roleError) throw roleError;
     if (!role) throw new Error("У этого аккаунта нет прав администратора");
 
+    // Persist already-polished content so the DB stores correct typography.
     const content = normalizeSiteContent(data);
 
     const { data: savedRow, error } = await context.supabase

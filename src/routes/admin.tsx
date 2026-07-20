@@ -5,12 +5,14 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   DEFAULT_CONTENT,
   getYoutubeThumbnail,
+  normalizeSiteContent,
   resolvePortfolioCover,
   type PortfolioVideo,
   type SiteContent,
 } from "@/lib/site-content";
 import { getAdminSiteContent, saveAdminSiteContent } from "@/lib/site-content.functions";
 import { uploadSiteMedia } from "@/lib/media-upload";
+import { polishBody, polishLabel, polishTitle } from "@/lib/typography";
 
 const DEFAULT_PORTRAIT = "/media/portrait.jpg";
 const FALLBACK_COVER = "/media/video-thumb-1.jpg";
@@ -78,10 +80,10 @@ function AdminPage() {
         setChecking(false);
         return;
       }
-      setContent(adminData.content ?? DEFAULT_CONTENT);
+      setContent(normalizeSiteContent(adminData.content ?? DEFAULT_CONTENT));
     } catch (err: unknown) {
       setStatus("Ошибка загрузки: " + errorMessage(err, "неизвестная ошибка"));
-      setContent(DEFAULT_CONTENT);
+      setContent(normalizeSiteContent(DEFAULT_CONTENT));
     } finally {
       setChecking(false);
     }
@@ -112,8 +114,9 @@ function AdminPage() {
     setStatus(null);
     try {
       const savedContent = await saveAdminSiteContent({ data: content });
-      setContent(savedContent);
-      queryClient.setQueryData(["site_content"], savedContent);
+      const polished = normalizeSiteContent(savedContent);
+      setContent(polished);
+      queryClient.setQueryData(["site_content"], polished);
       await queryClient.invalidateQueries({ queryKey: ["site_content"], refetchType: "all" });
       setStatus("✓ Сохранено и обновлено на сайте");
     } catch (err: unknown) {
@@ -328,6 +331,7 @@ function AdminPage() {
           />
           <Field
             label="Заголовок"
+            polish="title"
             value={content.about.heading}
             onChange={(v) =>
               update((d) => {
@@ -356,7 +360,12 @@ function AdminPage() {
             }
             render={(item, set) => (
               <div className="grid grid-cols-2 gap-2">
-                <Field label="Число" value={item.n} onChange={(v) => set({ ...item, n: v })} />
+                <Field
+                  label="Число"
+                  polish="none"
+                  value={item.n}
+                  onChange={(v) => set({ ...item, n: v })}
+                />
                 <Field label="Подпись" value={item.l} onChange={(v) => set({ ...item, l: v })} />
               </div>
             )}
@@ -376,6 +385,7 @@ function AdminPage() {
           />
           <Field
             label="Заголовок"
+            polish="title"
             value={content.services.heading}
             onChange={(v) =>
               update((d) => {
@@ -396,9 +406,15 @@ function AdminPage() {
             render={(item, set) => (
               <div className="space-y-2">
                 <div className="grid grid-cols-[100px_1fr] gap-2">
-                  <Field label="№" value={item.n} onChange={(v) => set({ ...item, n: v })} />
+                  <Field
+                    label="№"
+                    polish="none"
+                    value={item.n}
+                    onChange={(v) => set({ ...item, n: v })}
+                  />
                   <Field
                     label="Заголовок"
+                    polish="title"
                     value={item.t}
                     onChange={(v) => set({ ...item, t: v })}
                   />
@@ -439,6 +455,7 @@ function AdminPage() {
           />
           <Field
             label="Заголовок"
+            polish="title"
             value={content.portfolio.heading}
             onChange={(v) =>
               update((d) => {
@@ -458,6 +475,7 @@ function AdminPage() {
               <div className="space-y-2">
                 <Field
                   label="Название"
+                  polish="title"
                   value={item.title}
                   onChange={(v) => set({ ...item, title: v })}
                 />
@@ -494,6 +512,7 @@ function AdminPage() {
                 ) : (
                   <Field
                     label={item.source === "vk" ? "VK ссылка (embed)" : "YouTube ссылка"}
+                    polish="none"
                     value={item.url}
                     onChange={(v) => set({ ...item, url: v })}
                     placeholder={
@@ -545,6 +564,7 @@ function AdminPage() {
           />
           <Field
             label="Заголовок"
+            polish="title"
             value={content.experience.heading}
             onChange={(v) =>
               update((d) => {
@@ -561,9 +581,24 @@ function AdminPage() {
             }
             render={(item, set) => (
               <div className="grid grid-cols-[100px_1fr_1fr] gap-2">
-                <Field label="Год" value={item.y} onChange={(v) => set({ ...item, y: v })} />
-                <Field label="Название" value={item.t} onChange={(v) => set({ ...item, t: v })} />
-                <Field label="Описание" value={item.d} onChange={(v) => set({ ...item, d: v })} />
+                <Field
+                  label="Год"
+                  polish="none"
+                  value={item.y}
+                  onChange={(v) => set({ ...item, y: v })}
+                />
+                <Field
+                  label="Название"
+                  polish="title"
+                  value={item.t}
+                  onChange={(v) => set({ ...item, t: v })}
+                />
+                <Field
+                  label="Описание"
+                  polish="body"
+                  value={item.d}
+                  onChange={(v) => set({ ...item, d: v })}
+                />
               </div>
             )}
             newItem={() => ({ y: "2025", t: "", d: "" })}
@@ -582,6 +617,7 @@ function AdminPage() {
           />
           <Field
             label="Заголовок"
+            polish="title"
             value={content.contact.heading}
             onChange={(v) =>
               update((d) => {
@@ -600,6 +636,7 @@ function AdminPage() {
           />
           <Field
             label="Email"
+            polish="none"
             value={content.contact.email}
             onChange={(v) =>
               update((d) => {
@@ -609,6 +646,7 @@ function AdminPage() {
           />
           <Field
             label="Телефон"
+            polish="none"
             value={content.contact.phone}
             onChange={(v) =>
               update((d) => {
@@ -1080,12 +1118,22 @@ function Field({
   value,
   onChange,
   placeholder,
+  polish = "label",
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
+  /** Typography applied on blur (and already on CMS load/save). */
+  polish?: "title" | "body" | "label" | "none";
 }) {
+  const applyPolish = (raw: string) => {
+    if (polish === "none") return raw;
+    if (polish === "title") return polishTitle(raw);
+    if (polish === "body") return polishBody(raw);
+    return polishLabel(raw);
+  };
+
   return (
     <label className="block">
       {label && (
@@ -1097,6 +1145,10 @@ function Field({
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onBlur={() => {
+          const next = applyPolish(value);
+          if (next !== value) onChange(next);
+        }}
         placeholder={placeholder}
         className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/60"
       />
@@ -1123,6 +1175,10 @@ function TextArea({
       <textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onBlur={() => {
+          const next = polishBody(value);
+          if (next !== value) onChange(next);
+        }}
         rows={3}
         className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/60"
       />
@@ -1218,6 +1274,7 @@ function SocialsEditor({
                 )}
                 <Field
                   label="Ссылка"
+                  polish="none"
                   value={item.url}
                   onChange={(v) => setAt(i, { ...item, url: v })}
                   placeholder="https://"

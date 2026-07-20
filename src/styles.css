@@ -126,6 +126,12 @@
     overflow-x: hidden;
     max-width: 100vw;
   }
+
+  /* Softer wraps on long copy (desktop + mobile); nbsp handles prepositions */
+  p,
+  .text-pretty {
+    text-wrap: pretty;
+  }
   /* Clickable affordance — Tailwind preflight leaves buttons as default cursor */
   a[href],
   button:not(:disabled):not([aria-disabled="true"]),

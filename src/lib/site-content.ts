@@ -1,4 +1,4 @@
-import { polishBody, polishTitle } from "@/lib/typography";
+import { polishBody, polishLabel, polishTitle } from "@/lib/typography";
 
 export type SiteContent = {
   hero: {
@@ -257,42 +257,58 @@ export function normalizeSiteContent(raw: unknown): SiteContent {
     },
   };
 
-  return polishSiteContent(merged);
+  return applySiteTypography(merged);
 }
 
-/** Titles without trailing periods; last sentence of body without a period; «и» + nbsp. */
-function polishSiteContent(content: SiteContent): SiteContent {
+/**
+ * Apply Russian typography to all CMS text fields (hanging prepositions → nbsp,
+ * trailing periods stripped on titles/body). Called on every load/save of site content.
+ */
+export function applySiteTypography(content: SiteContent): SiteContent {
   return {
     ...content,
     hero: {
       ...content.hero,
       description: polishBody(content.hero.description),
+      ctaPrimary: polishLabel(content.hero.ctaPrimary),
+      ctaSecondary: polishLabel(content.hero.ctaSecondary),
     },
+    marquee: content.marquee.map(polishLabel),
     about: {
       ...content.about,
+      eyebrow: polishLabel(content.about.eyebrow),
       heading: polishTitle(content.about.heading),
       paragraphs: content.about.paragraphs.map(polishBody),
+      stats: content.about.stats.map((stat) => ({
+        ...stat,
+        l: polishLabel(stat.l),
+      })),
     },
     services: {
       ...content.services,
+      eyebrow: polishLabel(content.services.eyebrow),
       heading: polishTitle(content.services.heading),
       items: content.services.items.map((item) => ({
         ...item,
         t: polishTitle(item.t),
         d: polishBody(item.d),
+        tags: item.tags.map(polishLabel),
       })),
     },
     portfolio: {
       ...content.portfolio,
+      eyebrow: polishLabel(content.portfolio.eyebrow),
       heading: polishTitle(content.portfolio.heading),
       videos: content.portfolio.videos.map((video) => ({
         ...video,
         title: polishTitle(video.title),
         desc: polishBody(video.desc),
+        tags: video.tags.map(polishLabel),
       })),
     },
     experience: {
       ...content.experience,
+      eyebrow: polishLabel(content.experience.eyebrow),
       heading: polishTitle(content.experience.heading),
       items: content.experience.items.map((item) => ({
         ...item,
@@ -302,6 +318,7 @@ function polishSiteContent(content: SiteContent): SiteContent {
     },
     contact: {
       ...content.contact,
+      eyebrow: polishLabel(content.contact.eyebrow),
       heading: polishTitle(content.contact.heading),
       description: polishBody(content.contact.description),
     },
