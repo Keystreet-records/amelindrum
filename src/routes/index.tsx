@@ -79,7 +79,7 @@ function Index() {
 
 function Hero({ c }: { c: SiteContent }) {
   return (
-    <section id="top" className="relative min-h-dvh overflow-x-clip grain touch-pan-y">
+    <section id="top" className="relative min-h-screen min-h-dvh overflow-x-clip grain touch-pan-y">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <img
           src={HERO_IMG}
@@ -107,7 +107,7 @@ function Hero({ c }: { c: SiteContent }) {
 
       <div
         data-parallax="hero-content"
-        className="relative mx-auto flex min-h-dvh max-w-7xl flex-col justify-end px-6 pb-20 pt-28 md:pb-24 md:pt-32 md:will-change-transform touch-pan-y"
+        className="relative mx-auto flex min-h-screen min-h-dvh max-w-7xl flex-col justify-end px-6 pb-20 pt-28 md:pb-24 md:pt-32 md:will-change-transform touch-pan-y"
       >
         <div data-fade="hero-text" className="hero-copy max-w-5xl">
           <h1 className="hero-title">
@@ -124,7 +124,7 @@ function Hero({ c }: { c: SiteContent }) {
           >
             {c.hero.description}
           </p>
-          <div className="mt-10 flex flex-wrap gap-4">
+          <div className="mt-10 flex w-full max-w-xl flex-col gap-3 sm:max-w-none sm:flex-row sm:flex-wrap sm:gap-4">
             <a
               data-motion="hero-cta"
               href="#contact"
@@ -132,7 +132,7 @@ function Hero({ c }: { c: SiteContent }) {
                 event.preventDefault();
                 scrollToHash("#contact");
               }}
-              className="btn-soft btn-ember rounded-full px-7 py-3.5 font-medium text-primary-foreground shadow-glow"
+              className="btn-soft btn-ember inline-flex w-full items-center justify-center rounded-full px-7 py-3.5 text-center font-medium text-primary-foreground shadow-glow sm:w-auto"
             >
               {c.hero.ctaPrimary}
             </a>
@@ -143,7 +143,7 @@ function Hero({ c }: { c: SiteContent }) {
                 event.preventDefault();
                 scrollToHash("#services");
               }}
-              className="btn-soft rounded-full border border-foreground/40 bg-background/20 px-7 py-3.5 font-medium backdrop-blur-sm hover:border-foreground/55 hover:bg-secondary/80"
+              className="btn-soft inline-flex w-full items-center justify-center rounded-full border border-foreground/40 bg-background/20 px-7 py-3.5 text-center font-medium backdrop-blur-sm hover:border-foreground/55 hover:bg-secondary/80 sm:w-auto"
             >
               {c.hero.ctaSecondary}
             </a>

@@ -37,43 +37,66 @@
 :root {
   --radius: 0.5rem;
 
-  /* Graphite base — lighter field so blocks can contrast */
+  /* Graphite base — hex fallbacks first for non-oklch engines, then oklch */
+  --background: #1c222e;
   --background: oklch(0.22 0.016 255);
+  --foreground: #f2f4f7;
   --foreground: oklch(0.96 0.008 255);
 
+  --card: #11151f;
   --card: oklch(0.15 0.018 255);
+  --card-foreground: #f2f4f7;
   --card-foreground: oklch(0.96 0.008 255);
 
+  --popover: #131722;
   --popover: oklch(0.16 0.018 255);
+  --popover-foreground: #f2f4f7;
   --popover-foreground: oklch(0.96 0.008 255);
 
   /* Green/lime primary */
+  --primary: #4fbf3a;
   --primary: oklch(0.65 0.18 145);
+  --primary-foreground: #0d1220;
   --primary-foreground: oklch(0.12 0.02 255);
 
+  --secondary: #2a3140;
   --secondary: oklch(0.26 0.016 255);
+  --secondary-foreground: #f2f4f7;
   --secondary-foreground: oklch(0.96 0.008 255);
 
+  --muted: #2a3140;
   --muted: oklch(0.26 0.016 255);
+  --muted-foreground: #b4bcc9;
   --muted-foreground: oklch(0.76 0.02 255);
 
+  --accent: #9be84a;
   --accent: oklch(0.78 0.2 125);
+  --accent-foreground: #0d1220;
   --accent-foreground: oklch(0.12 0.02 255);
 
+  --destructive: #e2553d;
   --destructive: oklch(0.6 0.22 27);
+  --destructive-foreground: #fff8f2;
   --destructive-foreground: oklch(0.98 0.01 60);
 
+  --border: #3d4658;
   --border: oklch(0.34 0.02 255);
+  --input: #2e3646;
   --input: oklch(0.28 0.016 255);
+  --ring: #4fbf3a;
   --ring: oklch(0.65 0.18 145);
 
+  --ember: #3db83a;
   --ember: oklch(0.6 0.2 145);
+  --copper: #b8f04a;
   --copper: oklch(0.8 0.22 120);
 
   --font-display: "Onest", "Golos Text", system-ui, sans-serif;
   --font-sans: "Golos Text", "Segoe UI", system-ui, -apple-system, sans-serif;
 
+  --gradient-ember: linear-gradient(135deg, #3db83a, #c4f24d);
   --gradient-ember: linear-gradient(135deg, oklch(0.6 0.2 145), oklch(0.82 0.24 120));
+  --gradient-graphite: linear-gradient(165deg, #171c2a 0%, #222938 40%, #1a2030 72%, #121722 100%);
   --gradient-graphite: linear-gradient(
     165deg,
     oklch(0.2 0.018 262) 0%,
@@ -82,12 +105,18 @@
     oklch(0.19 0.02 265) 100%
   );
   /* Solid base for Safari chrome / safe-area bleed (matches gradient end) */
+  --mobile-nav-base: #0a0e18;
   --mobile-nav-base: oklch(0.19 0.02 265);
   /* Header scroll fill — same mid-tone as graphite field */
+  --nav-surface: #222938;
   --nav-surface: oklch(0.245 0.022 252);
+  --gradient-stage:
+    radial-gradient(ellipse at 20% 0%, rgba(40, 55, 90, 0.4), transparent 60%),
+    radial-gradient(ellipse at 80% 100%, rgba(28, 40, 75, 0.32), transparent 55%);
   --gradient-stage:
     radial-gradient(ellipse at 20% 0%, oklch(0.22 0.06 255 / 0.4), transparent 60%),
     radial-gradient(ellipse at 80% 100%, oklch(0.18 0.05 260 / 0.32), transparent 55%);
+  --shadow-glow: 0 20px 60px -20px rgba(61, 184, 58, 0.45);
   --shadow-glow: 0 20px 60px -20px oklch(0.6 0.2 145 / 0.45);
   --shadow-card: 0 30px 60px -30px oklch(0 0 0 / 0.8);
 
@@ -109,8 +138,11 @@
     border-color: var(--color-border);
   }
   html {
+    /* Hex fallback for older engines that ignore oklch() custom props */
+    background-color: #1c222e;
     background-color: var(--color-background);
-    /* clip (not hidden) — overflow-x:hidden on html+body breaks iOS momentum scroll */
+    /* clip preferred; hidden as cascade fallback for older Safari */
+    overflow-x: hidden;
     overflow-x: clip;
   }
   @media (prefers-reduced-motion: no-preference) and (hover: hover) and (pointer: fine) {
@@ -122,6 +154,7 @@
     position: relative;
     isolation: isolate;
     background: transparent;
+    color: #f2f4f7;
     color: var(--color-foreground);
     font-family: var(--font-sans);
     font-feature-settings:
@@ -130,9 +163,15 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    overflow-x: hidden;
     overflow-x: clip;
     max-width: 100vw;
-    overscroll-behavior-y: none;
+  }
+  /* Avoid locking desktop Firefox/Chrome wheel overscroll; keep on touch only */
+  @media (pointer: coarse) {
+    body {
+      overscroll-behavior-y: none;
+    }
   }
 
   /* Anchor jumps clear the fixed site header */
@@ -144,10 +183,28 @@
     scroll-margin-top: 4.75rem;
   }
 
-  /* Softer wraps on long copy (desktop + mobile); nbsp handles prepositions */
+  /* Images: prevent Safari/Firefox intrinsic-size overflow */
+  img,
+  video,
+  svg {
+    max-width: 100%;
+    height: auto;
+  }
+  /* Keep decorative hero mark from collapsing weirdly when height:auto wins */
+  .hero-logo {
+    height: auto;
+  }
+
+  /* Softer wraps where supported (ignored safely in Firefox until pretty ships) */
   p,
   .text-pretty {
     text-wrap: pretty;
+  }
+  h1,
+  h2,
+  h3,
+  .text-balance {
+    text-wrap: balance;
   }
   /* Clickable affordance — Tailwind preflight leaves buttons as default cursor */
   a[href],
