@@ -78,6 +78,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
+      /* Required for YouTube embeds — they reject players without a Referer */
+      { name: "referrer", content: "strict-origin-when-cross-origin" },
       { title: "Аркадий Амелин — сессионный барабанщик" },
       {
         name: "description",

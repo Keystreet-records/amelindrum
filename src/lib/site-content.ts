@@ -446,6 +446,38 @@ export function getYoutubeEmbed(url: string): string | null {
   return id ? `https://www.youtube.com/embed/${id}` : null;
 }
 
+/** Canonical watch URL for “open on YouTube” fallback when embed is blocked. */
+export function getYoutubeWatchUrl(url: string): string | null {
+  const id = getYoutubeVideoId(url);
+  return id ? `https://www.youtube.com/watch?v=${id}` : null;
+}
+
+/**
+ * Build an embed URL YouTube is more likely to accept for anonymous viewers.
+ * Requires a valid Referer/origin (see iframe referrerPolicy + site meta referrer).
+ */
+export function buildYoutubeEmbedSrc(
+  url: string,
+  options?: { autoplay?: boolean; origin?: string },
+): string | null {
+  const base = getYoutubeEmbed(url);
+  if (!base) return null;
+
+  const params = new URLSearchParams({
+    playsinline: "1",
+    rel: "0",
+    modestbranding: "1",
+  });
+  if (options?.autoplay) params.set("autoplay", "1");
+
+  const origin =
+    options?.origin ??
+    (typeof window !== "undefined" ? window.location.origin : import.meta.env.VITE_SITE_URL?.replace(/\/$/, ""));
+  if (origin?.startsWith("http")) params.set("origin", origin);
+
+  return `${base}?${params.toString()}`;
+}
+
 /** YouTube preview image for carousel cards (hq is widely available). */
 export function getYoutubeThumbnail(url: string): string | null {
   const id = getYoutubeVideoId(url);
@@ -497,6 +529,5 @@ export function getPortfolioVideoEmbed(video: PortfolioVideo): string | null {
       return embed;
     }
   }
-  const embed = getYoutubeEmbed(video.url);
-  return embed ? `${embed}?autoplay=1` : null;
+  return buildYoutubeEmbedSrc(video.url, { autoplay: true });
 }

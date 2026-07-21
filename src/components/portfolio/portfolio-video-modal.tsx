@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { animateVideoModal } from "@/hooks/use-landing-motion";
-import { getPortfolioVideoEmbed, type PortfolioVideo } from "@/lib/site-content";
+import {
+  getPortfolioVideoEmbed,
+  getYoutubeWatchUrl,
+  type PortfolioVideo,
+} from "@/lib/site-content";
 
 type PortfolioVideoModalProps = {
   video: PortfolioVideo | null;
@@ -9,10 +13,14 @@ type PortfolioVideoModalProps = {
 
 export function PortfolioVideoModal({ video, onClose }: PortfolioVideoModalProps) {
   const [closing, setClosing] = useState(false);
+  /** Delay iframe mount until after open — keeps the click as a real user gesture for YouTube. */
+  const [playerReady, setPlayerReady] = useState(false);
   const overlayRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const embed = video && video.source !== "file" ? getPortfolioVideoEmbed(video) : null;
   const fileUrl = video?.source === "file" ? video.url.trim() : "";
+  const youtubeWatch =
+    video?.source === "youtube" ? getYoutubeWatchUrl(video.url) : null;
 
   const close = useCallback(() => {
     if (!overlayRef.current || !panelRef.current || closing || !video) return;
@@ -24,7 +32,10 @@ export function PortfolioVideoModal({ video, onClose }: PortfolioVideoModalProps
   }, [closing, onClose, video]);
 
   useEffect(() => {
-    if (!video) return;
+    if (!video) {
+      setPlayerReady(false);
+      return;
+    }
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") close();
     };
@@ -39,6 +50,12 @@ export function PortfolioVideoModal({ video, onClose }: PortfolioVideoModalProps
   useEffect(() => {
     if (!video || !overlayRef.current || !panelRef.current) return;
     animateVideoModal(overlayRef.current, panelRef.current, "in");
+    // Mount player on the next frame so the opening tap counts as user activation.
+    const id = window.requestAnimationFrame(() => setPlayerReady(true));
+    return () => {
+      window.cancelAnimationFrame(id);
+      setPlayerReady(false);
+    };
   }, [video]);
 
   if (!video) return null;
@@ -74,7 +91,7 @@ export function PortfolioVideoModal({ video, onClose }: PortfolioVideoModalProps
           </svg>
         </button>
         <div className="relative aspect-video bg-black">
-          {fileUrl ? (
+          {fileUrl && playerReady ? (
             <video
               key={fileUrl}
               src={fileUrl}
@@ -83,13 +100,15 @@ export function PortfolioVideoModal({ video, onClose }: PortfolioVideoModalProps
               playsInline
               className="h-full w-full"
             />
-          ) : embed ? (
+          ) : embed && playerReady ? (
             <iframe
               src={embed}
               title={video.title}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               allowFullScreen
-              className="h-full w-full"
+              referrerPolicy="strict-origin-when-cross-origin"
+              loading="eager"
+              className="h-full w-full border-0"
             />
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
@@ -104,6 +123,21 @@ export function PortfolioVideoModal({ video, onClose }: PortfolioVideoModalProps
             </div>
           )}
         </div>
+        {youtubeWatch ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 px-4 py-3 sm:px-5">
+            <p className="text-xs text-muted-foreground sm:text-sm">
+              Если YouTube просит войти — откройте ролик на YouTube или загрузите файл в админке.
+            </p>
+            <a
+              href={youtubeWatch}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="shrink-0 text-sm font-medium text-primary underline-offset-4 hover:underline"
+            >
+              Смотреть на YouTube
+            </a>
+          </div>
+        ) : null}
       </div>
     </div>
   );
