@@ -81,6 +81,8 @@
     oklch(0.215 0.018 258) 72%,
     oklch(0.19 0.02 265) 100%
   );
+  /* Solid base for Safari chrome / safe-area bleed (matches gradient end) */
+  --mobile-nav-base: oklch(0.19 0.02 265);
   /* Header scroll fill — same mid-tone as graphite field */
   --nav-surface: oklch(0.245 0.022 252);
   --gradient-stage:
@@ -372,8 +374,27 @@
   }
 
   .mobile-nav-panel {
-    background: var(--gradient-graphite);
+    /* Solid first — iOS Safari bottom bar samples this through the translucent chrome */
+    background-color: var(--mobile-nav-base);
+    background-image: var(--gradient-graphite);
+    /* Cover large viewport (includes area under Safari toolbar), not just dynamic vh */
+    min-height: 100vh;
+    min-height: 100dvh;
+    min-height: 100lvh;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
     animation: mobile-nav-panel-in 320ms var(--ease-out) both;
+  }
+  /* Bleed the same base color below/around the panel (Safari toolbar + overscroll) */
+  .mobile-nav-panel::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    height: max(50vh, env(safe-area-inset-bottom, 0px) + 8rem);
+    background: var(--mobile-nav-base);
+    pointer-events: none;
   }
 
   .mobile-nav-chrome {

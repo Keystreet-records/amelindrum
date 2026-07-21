@@ -1,4 +1,4 @@
-import { useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent, type RefObject } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent, type RefObject } from "react";
 import { Menu, X } from "lucide-react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { HeroSignatureLogo } from "@/components/logo/hero-signature-logo";
@@ -78,6 +78,27 @@ function MobileNavMenu({
   const brandTap = useTapLink(() => onOpenChange(false));
   const signatureTap = useTapLink(() => onOpenChange(false));
 
+  // Keep Safari chrome / overscroll the same navy as the menu (not the lighter page field).
+  useEffect(() => {
+    if (!open) return;
+
+    const root = document.documentElement;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    const prevHtmlBg = root.style.backgroundColor;
+    const prevTheme = meta?.getAttribute("content");
+
+    root.style.backgroundColor = "#0a0e18";
+    meta?.setAttribute("content", "#0a0e18");
+
+    return () => {
+      root.style.backgroundColor = prevHtmlBg;
+      if (meta) {
+        if (prevTheme == null) meta.removeAttribute("content");
+        else meta.setAttribute("content", prevTheme);
+      }
+    };
+  }, [open]);
+
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Trigger asChild>
@@ -93,7 +114,7 @@ function MobileNavMenu({
       <DialogPrimitive.Portal>
         {open ? (
           <DialogPrimitive.Content
-            className="mobile-nav-panel fixed inset-0 z-[60] flex h-[100dvh] w-full flex-col outline-none"
+            className="mobile-nav-panel fixed inset-0 z-[60] flex w-full flex-col outline-none"
             aria-describedby={undefined}
             onOpenAutoFocus={(event) => {
               event.preventDefault();
@@ -120,7 +141,7 @@ function MobileNavMenu({
               </DialogPrimitive.Close>
             </div>
 
-            <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col justify-center overflow-y-auto overscroll-contain px-6 pb-10 pt-2">
+            <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col justify-center overflow-y-auto overscroll-contain px-6 pb-[max(2.5rem,env(safe-area-inset-bottom))] pt-2">
               <a
                 href="#top"
                 {...signatureTap}

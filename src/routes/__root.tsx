@@ -77,13 +77,16 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
       { title: "Аркадий Амелин — сессионный барабанщик" },
       {
         name: "description",
         content: "Аркадий Амелин — профессиональный музыкант, сессионный ударник и преподаватель.",
       },
       { name: "author", content: "Аркадий Амелин" },
+      /* Matches mobile-nav / graphite base so Safari chrome doesn't flash a lighter bar */
+      { name: "theme-color", content: "#0a0e18" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
       { property: "og:title", content: "Аркадий Амелин — барабанщик" },
       {
         property: "og:description",
