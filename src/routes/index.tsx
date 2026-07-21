@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useRef } from "react";
+import { useRef, type MouseEvent } from "react";
 import { HeroSignatureLogo } from "@/components/logo/hero-signature-logo";
 import { PortfolioSection } from "@/components/portfolio/portfolio-section";
 import { SocialLinks } from "@/components/social/social-links";
@@ -7,6 +7,7 @@ import { SiteNav } from "@/components/site-nav";
 import { useSiteContent } from "@/hooks/use-site-content";
 import { useLandingMotion } from "@/hooks/use-landing-motion";
 import { siteContentQueryOptions } from "@/lib/site-content.query";
+import { scrollToHash } from "@/lib/scroll-to-hash";
 import type { SiteContent } from "@/lib/site-content";
 
 const HERO_IMG = "/media/hero-cover.jpg";
@@ -78,31 +79,35 @@ function Index() {
 
 function Hero({ c }: { c: SiteContent }) {
   return (
-    <section id="top" className="relative min-h-screen overflow-x-hidden grain">
-      <div className="absolute inset-0 overflow-hidden">
+    <section id="top" className="relative min-h-dvh overflow-x-clip grain touch-pan-y">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <img
           src={HERO_IMG}
           alt="Аркадий Амелин за барабанной установкой — вид сверху"
           data-parallax="hero-image"
           data-hero="image"
-          className="hero-image h-[108%] w-full object-cover object-[88%_42%] sm:object-[75%_40%] md:object-[center_40%] will-change-transform"
+          className="hero-image h-[108%] w-full object-cover object-[88%_42%] sm:object-[75%_40%] md:object-[center_40%] md:will-change-transform"
           width={1024}
           height={683}
           fetchPriority="high"
+          draggable={false}
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/45 to-background/15" />
-        <div className="absolute inset-0 bg-gradient-to-r from-background/25 via-transparent to-background/10" />
-        <div className="hero-vignette pointer-events-none absolute inset-0" aria-hidden />
+        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/45 to-background/15" aria-hidden />
+        <div
+          className="absolute inset-0 bg-gradient-to-r from-background/25 via-transparent to-background/10"
+          aria-hidden
+        />
+        <div className="hero-vignette absolute inset-0" aria-hidden />
         <div
           data-hero="sweep"
-          className="hero-sweep pointer-events-none absolute inset-y-0 -left-1/3 w-1/3 will-change-transform"
+          className="hero-sweep absolute inset-y-0 -left-1/3 w-1/3 md:will-change-transform"
           aria-hidden
         />
       </div>
 
       <div
         data-parallax="hero-content"
-        className="relative mx-auto flex min-h-screen max-w-7xl flex-col justify-end px-6 pb-20 pt-28 md:pb-24 md:pt-32 will-change-transform"
+        className="relative mx-auto flex min-h-dvh max-w-7xl flex-col justify-end px-6 pb-20 pt-28 md:pb-24 md:pt-32 md:will-change-transform touch-pan-y"
       >
         <div data-fade="hero-text" className="hero-copy max-w-5xl">
           <h1 className="hero-title">
@@ -123,6 +128,10 @@ function Hero({ c }: { c: SiteContent }) {
             <a
               data-motion="hero-cta"
               href="#contact"
+              onClick={(event: MouseEvent<HTMLAnchorElement>) => {
+                event.preventDefault();
+                scrollToHash("#contact");
+              }}
               className="btn-soft btn-ember rounded-full px-7 py-3.5 font-medium text-primary-foreground shadow-glow"
             >
               {c.hero.ctaPrimary}
@@ -130,6 +139,10 @@ function Hero({ c }: { c: SiteContent }) {
             <a
               data-motion="hero-cta"
               href="#services"
+              onClick={(event: MouseEvent<HTMLAnchorElement>) => {
+                event.preventDefault();
+                scrollToHash("#services");
+              }}
               className="btn-soft rounded-full border border-foreground/40 bg-background/20 px-7 py-3.5 font-medium backdrop-blur-sm hover:border-foreground/55 hover:bg-secondary/80"
             >
               {c.hero.ctaSecondary}

@@ -1,9 +1,10 @@
-import { useRef, useState, type CSSProperties, type RefObject } from "react";
+import { useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent, type RefObject } from "react";
 import { Menu, X } from "lucide-react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { HeroSignatureLogo } from "@/components/logo/hero-signature-logo";
 import { SocialLinks } from "@/components/social/social-links";
 import { useNavBeat, useNavMotion } from "@/hooks/use-nav-motion";
+import { scrollToHash } from "@/lib/scroll-to-hash";
 import type { SiteContent } from "@/lib/site-content";
 import { cn } from "@/lib/utils";
 
@@ -14,6 +15,36 @@ const LINKS = [
   { href: "#experience", label: "Опыт" },
   { href: "#contact", label: "Контакты" },
 ] as const;
+
+/** Ignore click if the pointer moved — otherwise Safari treats a scroll-start on the link as navigation. */
+function useTapLink(onNavigate?: () => void) {
+  const origin = useRef<{ x: number; y: number } | null>(null);
+
+  return {
+    onPointerDown: (event: PointerEvent) => {
+      origin.current = { x: event.clientX, y: event.clientY };
+    },
+    onClick: (event: MouseEvent<HTMLAnchorElement>) => {
+      const href = event.currentTarget.getAttribute("href");
+      if (!href?.startsWith("#")) return;
+
+      const start = origin.current;
+      origin.current = null;
+      if (start) {
+        const dx = Math.abs(event.clientX - start.x);
+        const dy = Math.abs(event.clientY - start.y);
+        if (dx > 14 || dy > 14) {
+          event.preventDefault();
+          return;
+        }
+      }
+
+      event.preventDefault();
+      scrollToHash(href);
+      onNavigate?.();
+    },
+  };
+}
 
 function BrandMark({
   beatRef,
@@ -44,6 +75,9 @@ function MobileNavMenu({
   onOpenChange: (open: boolean) => void;
   socials: SiteContent["contact"]["socials"];
 }) {
+  const brandTap = useTapLink(() => onOpenChange(false));
+  const signatureTap = useTapLink(() => onOpenChange(false));
+
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Trigger asChild>
@@ -70,11 +104,7 @@ function MobileNavMenu({
           >
             <div className="mobile-nav-chrome mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-3">
               <DialogPrimitive.Title asChild>
-                <a
-                  href="#top"
-                  onClick={() => onOpenChange(false)}
-                  className="shrink-0 cursor-pointer"
-                >
+                <a href="#top" {...brandTap} className="shrink-0 cursor-pointer">
                   <BrandMark />
                 </a>
               </DialogPrimitive.Title>
@@ -90,10 +120,10 @@ function MobileNavMenu({
               </DialogPrimitive.Close>
             </div>
 
-            <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col justify-center overflow-y-auto px-6 pb-10 pt-2">
+            <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col justify-center overflow-y-auto overscroll-contain px-6 pb-10 pt-2">
               <a
                 href="#top"
-                onClick={() => onOpenChange(false)}
+                {...signatureTap}
                 className="mobile-nav-signature group mb-8 block w-[min(100%,18.5rem)] cursor-pointer sm:mb-10 sm:w-[min(100%,22rem)]"
                 aria-label="Аркадий Амелин — наверх"
               >
@@ -105,25 +135,13 @@ function MobileNavMenu({
 
               <nav className="flex flex-col" aria-label="Мобильная навигация">
                 {LINKS.map((link, index) => (
-                  <a
+                  <MobileNavLink
                     key={link.href}
                     href={link.href}
-                    onClick={() => onOpenChange(false)}
-                    className="mobile-nav-link group relative block border-b border-border/40 py-4 font-display text-[clamp(2rem,8vw,3.25rem)] leading-none tracking-tight text-foreground transition-colors duration-300 hover:text-primary"
-                    style={
-                      {
-                        transitionTimingFunction: "var(--ease-out)",
-                        "--mobile-nav-delay": `${220 + index * 55}ms`,
-                      } as CSSProperties
-                    }
-                  >
-                    <span className="mobile-nav-link-inner">
-                      <span className="mr-3 font-sans text-xs font-medium tracking-[0.2em] text-muted-foreground transition-colors duration-300 group-hover:text-primary/80">
-                        {String(index + 1).padStart(2, "0")}
-                      </span>
-                      {link.label}
-                    </span>
-                  </a>
+                    label={link.label}
+                    index={index}
+                    onNavigate={() => onOpenChange(false)}
+                  />
                 ))}
               </nav>
 
@@ -144,17 +162,52 @@ function MobileNavMenu({
   );
 }
 
+function MobileNavLink({
+  href,
+  label,
+  index,
+  onNavigate,
+}: {
+  href: string;
+  label: string;
+  index: number;
+  onNavigate: () => void;
+}) {
+  const tap = useTapLink(onNavigate);
+  return (
+    <a
+      href={href}
+      {...tap}
+      className="mobile-nav-link group relative block border-b border-border/40 py-4 font-display text-[clamp(2rem,8vw,3.25rem)] leading-none tracking-tight text-foreground transition-colors duration-300 hover:text-primary"
+      style={
+        {
+          transitionTimingFunction: "var(--ease-out)",
+          "--mobile-nav-delay": `${220 + index * 55}ms`,
+        } as CSSProperties
+      }
+    >
+      <span className="mobile-nav-link-inner">
+        <span className="mr-3 font-sans text-xs font-medium tracking-[0.2em] text-muted-foreground transition-colors duration-300 group-hover:text-primary/80">
+          {String(index + 1).padStart(2, "0")}
+        </span>
+        {label}
+      </span>
+    </a>
+  );
+}
+
 export function SiteNav({ socials = [] }: { socials?: SiteContent["contact"]["socials"] }) {
   const [open, setOpen] = useState(false);
   const headerRef = useRef<HTMLElement | null>(null);
   const beatRef = useRef<HTMLSpanElement | null>(null);
+  const brandTap = useTapLink();
   useNavMotion(headerRef);
   useNavBeat(beatRef);
 
   return (
     <header ref={headerRef} className="site-nav fixed top-0 z-50 w-full border-b backdrop-blur-md">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-6 py-3">
-        <a href="#top" className="shrink-0 cursor-pointer">
+        <a href="#top" {...brandTap} className="shrink-0 cursor-pointer">
           <BrandMark beatRef={beatRef} />
         </a>
 
@@ -164,13 +217,7 @@ export function SiteNav({ socials = [] }: { socials?: SiteContent["contact"]["so
             aria-label="Основная навигация"
           >
             {LINKS.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                className="nav-link cursor-pointer text-foreground/70 hover:text-foreground"
-              >
-                {link.label}
-              </a>
+              <DesktopNavLink key={link.href} href={link.href} label={link.label} />
             ))}
           </nav>
 
@@ -178,5 +225,14 @@ export function SiteNav({ socials = [] }: { socials?: SiteContent["contact"]["so
         </div>
       </div>
     </header>
+  );
+}
+
+function DesktopNavLink({ href, label }: { href: string; label: string }) {
+  const tap = useTapLink();
+  return (
+    <a href={href} {...tap} className="nav-link cursor-pointer text-foreground/70 hover:text-foreground">
+      {label}
+    </a>
   );
 }

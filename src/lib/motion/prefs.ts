@@ -3,6 +3,16 @@ export function prefersReducedMotion() {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
+/** Touch / coarse-pointer devices — avoid scroll-scrub transforms under the finger (Safari). */
+export function prefersTouchScroll() {
+  if (typeof window === "undefined") return false;
+  return (
+    window.matchMedia("(pointer: coarse)").matches ||
+    window.matchMedia("(hover: none)").matches ||
+    "ontouchstart" in window
+  );
+}
+
 /** Strong ease-out — entrances feel responsive but soft */
 export const EASE_OUT = "cubic-bezier(0.23, 1, 0.32, 1)";
 

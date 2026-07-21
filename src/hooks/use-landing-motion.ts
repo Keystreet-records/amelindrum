@@ -2,7 +2,7 @@ import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import type { RefObject } from "react";
-import { prefersReducedMotion } from "@/lib/motion/prefs";
+import { prefersReducedMotion, prefersTouchScroll } from "@/lib/motion/prefs";
 
 gsap.registerPlugin(useGSAP, ScrollTrigger);
 
@@ -21,6 +21,9 @@ export function useLandingMotion(rootRef: RefObject<HTMLElement | null>) {
         return;
       }
 
+      const touchScroll = prefersTouchScroll();
+      const isDesktopLayout = window.matchMedia("(min-width: 768px)").matches;
+
       const ctx = gsap.context(() => {
         gsap.set("[data-motion='hero-name'], [data-motion='hero-desc'], [data-motion='hero-cta']", {
           opacity: 0,
@@ -30,7 +33,7 @@ export function useLandingMotion(rootRef: RefObject<HTMLElement | null>) {
         gsap.set("[data-hero='image']", {
           scale: 1.12,
           filter: "brightness(0.55) contrast(1.05)",
-          transformOrigin: window.matchMedia("(min-width: 768px)").matches ? "50% 40%" : "88% 42%",
+          transformOrigin: isDesktopLayout ? "50% 40%" : "88% 42%",
         });
         gsap.set("[data-hero='sweep']", { xPercent: -20, opacity: 0 });
 
@@ -76,27 +79,30 @@ export function useLandingMotion(rootRef: RefObject<HTMLElement | null>) {
             "-=0.6",
           );
 
-        gsap.to("[data-parallax='hero-image']", {
-          y: 140,
-          ease: "none",
-          scrollTrigger: {
-            trigger: "#top",
-            start: "top top",
-            end: "bottom top",
-            scrub: 0.75,
-          },
-        });
+        // Scrubbed transforms under the finger lock iOS Safari scroll — keep on desktop only.
+        if (!touchScroll) {
+          gsap.to("[data-parallax='hero-image']", {
+            y: 140,
+            ease: "none",
+            scrollTrigger: {
+              trigger: "#top",
+              start: "top top",
+              end: "bottom top",
+              scrub: 0.75,
+            },
+          });
 
-        gsap.to("[data-parallax='hero-content']", {
-          y: -48,
-          ease: "none",
-          scrollTrigger: {
-            trigger: "#top",
-            start: "top top",
-            end: "65% top",
-            scrub: 0.45,
-          },
-        });
+          gsap.to("[data-parallax='hero-content']", {
+            y: -48,
+            ease: "none",
+            scrollTrigger: {
+              trigger: "#top",
+              start: "top top",
+              end: "65% top",
+              scrub: 0.45,
+            },
+          });
+        }
 
         gsap.to("[data-fade='hero-text']", {
           opacity: 0,
@@ -105,7 +111,7 @@ export function useLandingMotion(rootRef: RefObject<HTMLElement | null>) {
             trigger: "#top",
             start: "top top",
             end: "65% top",
-            scrub: 0.45,
+            scrub: touchScroll ? true : 0.45,
           },
         });
 

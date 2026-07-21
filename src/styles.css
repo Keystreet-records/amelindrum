@@ -107,9 +107,14 @@
     border-color: var(--color-border);
   }
   html {
-    scroll-behavior: smooth;
-    overflow-x: hidden;
     background-color: var(--color-background);
+    /* clip (not hidden) — overflow-x:hidden on html+body breaks iOS momentum scroll */
+    overflow-x: clip;
+  }
+  @media (prefers-reduced-motion: no-preference) and (hover: hover) and (pointer: fine) {
+    html {
+      scroll-behavior: smooth;
+    }
   }
   body {
     position: relative;
@@ -123,8 +128,18 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
-    overflow-x: hidden;
+    overflow-x: clip;
     max-width: 100vw;
+    overscroll-behavior-y: none;
+  }
+
+  /* Anchor jumps clear the fixed site header */
+  #about,
+  #services,
+  #portfolio,
+  #experience,
+  #contact {
+    scroll-margin-top: 4.75rem;
   }
 
   /* Softer wraps on long copy (desktop + mobile); nbsp handles prepositions */
@@ -185,6 +200,8 @@
     line-height: 0.92;
     letter-spacing: -0.02em;
     overflow: visible;
+    /* Decorative mark — never capture scroll/drag gestures (Safari iOS) */
+    pointer-events: none;
   }
   .hero-title-line {
     display: block;
@@ -196,6 +213,7 @@
     max-width: 100%;
     margin-left: -1.5%;
     overflow: visible;
+    pointer-events: none;
   }
   @media (min-width: 768px) {
     .hero-logo-wrap {
@@ -207,14 +225,23 @@
     display: block;
     width: 100%;
     height: auto;
+    pointer-events: none;
+    -webkit-user-drag: none;
+    user-select: none;
+    -webkit-touch-callout: none;
     filter: invert(1) drop-shadow(0 8px 28px oklch(0.08 0.02 255 / 0.5))
       drop-shadow(0 0 22px color-mix(in oklch, var(--primary) 24%, transparent));
   }
   .hero-copy {
     padding-bottom: 0.25rem;
+    touch-action: pan-y;
   }
   .hero-image {
     transform-origin: 88% 42%;
+    pointer-events: none;
+    -webkit-user-drag: none;
+    user-select: none;
+    -webkit-touch-callout: none;
   }
   @media (min-width: 768px) {
     .hero-image {
@@ -332,9 +359,16 @@
     );
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
+    /* Avoid 300ms click delay + let vertical pans pass as scroll */
+    touch-action: manipulation;
     transition:
       background-color 200ms ease,
       border-color 200ms ease;
+  }
+  .site-nav a,
+  .site-nav button {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
 
   .mobile-nav-panel {
