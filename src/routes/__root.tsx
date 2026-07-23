@@ -105,6 +105,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         href: appCss,
       },
     ],
+    scripts: [
+      {
+        children: `setTimeout(function(){document.documentElement.classList.add("motion-failsafe")},2200);`,
+      },
+    ],
   }),
   shellComponent: RootShell,
   component: RootComponent,

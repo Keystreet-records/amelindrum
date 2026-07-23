@@ -307,12 +307,29 @@
       transform-origin: 50% 40%;
     }
   }
-  /* Hero entrance starts slightly scaled; content stays visible without waiting for JS */
+  /* First paint: hide entrance targets until GSAP boots (no visible→hidden flash) */
+  .landing-root:not([data-motion-boot]) [data-motion],
+  .landing-root[data-motion-boot="pending"] [data-motion],
+  .landing-root:not([data-motion-boot]) [data-reveal],
+  .landing-root[data-motion-boot="pending"] [data-reveal] {
+    opacity: 0;
+  }
   .landing-root:not([data-motion-boot="ready"]):not([data-motion-boot="done"]) [data-hero="image"] {
     transform: scale(1.06);
   }
   .landing-root:not([data-motion-boot="ready"]):not([data-motion-boot="done"]) [data-hero="veil"] {
     opacity: 0.4;
+  }
+  /* If JS is slow/broken, reveal content after boot script sets this class */
+  html.motion-failsafe .landing-root [data-motion],
+  html.motion-failsafe .landing-root [data-reveal] {
+    opacity: 1 !important;
+  }
+  html.motion-failsafe .landing-root [data-hero="veil"] {
+    opacity: 0 !important;
+  }
+  html.motion-failsafe .landing-root [data-hero="image"] {
+    transform: none !important;
   }
   .hero-veil {
     pointer-events: none;

@@ -40,15 +40,19 @@ export function isConfiguredR2PublicUrl(url: string): boolean {
   }
 }
 
-/** Media hosts that stall on large contiguous GETs — play via same-origin proxy. */
-export function needsMediaProxy(url: string): boolean {
-  return isVercelBlobUrl(url) || isR2DevUrl(url) || isConfiguredR2PublicUrl(url);
+export function isR2PublicUrl(url: string): boolean {
+  return isR2DevUrl(url) || isConfiguredR2PublicUrl(url);
 }
 
 /**
- * Same-origin proxy for Blob / R2 media.
- * Direct CDN Range reads often stall after ~8–20KB on some networks.
+ * Only legacy Vercel Blob needs the same-origin proxy (large Ranges stall).
+ * R2 plays/loads directly — proxying through Vercel makes video unusably slow.
  */
+export function needsMediaProxy(url: string): boolean {
+  return isVercelBlobUrl(url);
+}
+
+/** Same-origin proxy for legacy Blob media only. */
 export function proxiedMediaUrl(url: string): string {
   const trimmed = url.trim();
   if (!trimmed || !needsMediaProxy(trimmed)) return trimmed;
