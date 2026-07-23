@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 const BLOB_HOST_SUFFIX = ".public.blob.vercel-storage.com";
-/** Contiguous Blob GETs often stall; small Range parts complete reliably. */
+const R2_DEV_HOST_SUFFIX = ".r2.dev";
+/** Contiguous CDN GETs often stall; small Range parts complete reliably. */
 const CHUNK_SIZE = 8 * 1024;
 const CHUNK_RETRIES = 4;
 const BUFFER_UNDER_BYTES = 8 * 1024 * 1024;
@@ -10,10 +11,30 @@ function isImageContentType(contentType: string | null): boolean {
   return Boolean(contentType?.toLowerCase().startsWith("image/"));
 }
 
-function isManagedBlobUrl(url: string): boolean {
+function configuredR2Hostname(): string | null {
+  const base = (process.env.R2_PUBLIC_BASE_URL ?? "").trim();
+  if (!base) return null;
+  try {
+    return new URL(base).hostname;
+  } catch {
+    return null;
+  }
+}
+
+/** Allowlisted public media hosts we re-stream in 8KB upstream Ranges. */
+function isManagedMediaUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
-    return parsed.protocol === "https:" && parsed.hostname.endsWith(BLOB_HOST_SUFFIX);
+    if (parsed.protocol !== "https:") return false;
+    if (parsed.hostname.endsWith(BLOB_HOST_SUFFIX)) return true;
+    if (parsed.hostname.endsWith(R2_DEV_HOST_SUFFIX) && parsed.pathname.includes("/portfolio/")) {
+      return true;
+    }
+    const r2Host = configuredR2Hostname();
+    if (r2Host && parsed.hostname === r2Host && parsed.pathname.includes("/portfolio/")) {
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }
@@ -128,7 +149,7 @@ async function fetchBlobBufferedSlice(url: string, start: number, end: number): 
 
 async function proxyBlob(request: Request): Promise<Response> {
   const target = new URL(request.url).searchParams.get("u")?.trim() || "";
-  if (!target || !isManagedBlobUrl(target)) {
+  if (!target || !isManagedMediaUrl(target)) {
     return Response.json({ error: "Invalid media URL" }, { status: 400 });
   }
 

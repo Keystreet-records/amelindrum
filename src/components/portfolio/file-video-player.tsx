@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { VIDEO_MAX_MB } from "@/lib/mp4-faststart";
-import { isVercelBlobUrl, proxiedMediaUrl } from "@/lib/media-url";
+import { needsMediaProxy, proxiedMediaUrl } from "@/lib/media-url";
 import { polishLabel } from "@/lib/typography";
 import { cn } from "@/lib/utils";
-import { loadMediaObjectUrl } from "@/lib/video-range-loader";
 
 type FileVideoPlayerProps = {
   src: string;
@@ -12,16 +11,9 @@ type FileVideoPlayerProps = {
   autoPlay?: boolean;
 };
 
-function isAbortError(err: unknown): boolean {
-  if (!err) return false;
-  if (err instanceof DOMException && err.name === "AbortError") return true;
-  if (err instanceof Error && /abort/i.test(err.message)) return true;
-  return false;
-}
-
 /**
- * R2 / CDN / local: play URL directly (browser Range).
- * Legacy Vercel Blob: assemble via same-origin proxy (Blob full GETs stall).
+ * Play via same-origin media-proxy when CDN Range stalls (Blob / R2.dev).
+ * Otherwise bind the URL directly.
  */
 export function FileVideoPlayer({
   src,
@@ -33,110 +25,70 @@ export function FileVideoPlayer({
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [waiting, setWaiting] = useState(false);
-  const [loadingPct, setLoadingPct] = useState<number | null>(null);
   const [retryTick, setRetryTick] = useState(0);
+
+  const playSrc = needsMediaProxy(src) ? proxiedMediaUrl(src) : src.trim();
 
   useEffect(() => {
     const el = videoRef.current;
-    if (!el) return;
+    if (!el || !playSrc) return;
 
     let cancelled = false;
-    let objectUrl: string | null = null;
-    const ac = new AbortController();
 
     setReady(false);
     setError(null);
     setWaiting(false);
-    setLoadingPct(null);
 
     const markReady = () => {
       if (cancelled) return;
       setReady(true);
       setError(null);
-      setLoadingPct(null);
       if (autoPlay) void el.play().catch(() => undefined);
     };
 
-    const fail = (message: string) => {
+    const fail = () => {
       if (cancelled) return;
-      setError(polishLabel(message));
+      setError(
+        polishLabel(
+          `Не удалось проиграть видео. Нужен MP4 (H.264 + AAC) до ${VIDEO_MAX_MB} МБ, с moov в начале файла (faststart).`,
+        ),
+      );
       setReady(false);
-      setLoadingPct(null);
     };
 
     const onWaiting = () => setWaiting(true);
     const onPlaying = () => setWaiting(false);
-    const onError = () => {
-      if (cancelled) return;
-      fail(
-        `Не удалось проиграть видео. Нужен MP4 (H.264 + AAC) до ${VIDEO_MAX_MB} МБ, с moov в начале файла (faststart).`,
-      );
-    };
-
-    const bindSrc = (url: string) => {
-      if (cancelled) return;
-      el.src = url;
-      el.preload = "auto";
-      try {
-        el.load();
-      } catch {
-        /* ignore */
-      }
-      if (el.readyState >= HTMLMediaElement.HAVE_METADATA) markReady();
-    };
 
     el.addEventListener("loadedmetadata", markReady);
     el.addEventListener("canplay", markReady);
     el.addEventListener("waiting", onWaiting);
     el.addEventListener("playing", onPlaying);
-    el.addEventListener("error", onError);
+    el.addEventListener("error", fail);
 
-    if (!isVercelBlobUrl(src)) {
-      bindSrc(src);
-    } else {
-      setLoadingPct(0);
-      void loadMediaObjectUrl(proxiedMediaUrl(src), {
-        signal: ac.signal,
-        contentType: "video/mp4",
-        onProgress: (p) => {
-          if (!cancelled) setLoadingPct(p.percentage);
-        },
-      })
-        .then((url) => {
-          if (cancelled) {
-            URL.revokeObjectURL(url);
-            return;
-          }
-          objectUrl = url;
-          bindSrc(url);
-        })
-        .catch((err) => {
-          if (cancelled || ac.signal.aborted || isAbortError(err)) return;
-          fail(
-            err instanceof Error && err.message
-              ? err.message
-              : `Не удалось загрузить видео (до ${VIDEO_MAX_MB} МБ). Проверьте сеть и формат MP4 H.264.`,
-          );
-        });
+    el.src = playSrc;
+    el.preload = "auto";
+    try {
+      el.load();
+    } catch {
+      /* ignore */
     }
+    if (el.readyState >= HTMLMediaElement.HAVE_METADATA) markReady();
 
     return () => {
       cancelled = true;
-      ac.abort();
       el.removeEventListener("loadedmetadata", markReady);
       el.removeEventListener("canplay", markReady);
       el.removeEventListener("waiting", onWaiting);
       el.removeEventListener("playing", onPlaying);
-      el.removeEventListener("error", onError);
+      el.removeEventListener("error", fail);
       el.removeAttribute("src");
       try {
         el.load();
       } catch {
         /* ignore */
       }
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [src, autoPlay, retryTick]);
+  }, [playSrc, autoPlay, retryTick]);
 
   return (
     <div className={cn("relative overflow-hidden bg-black", className)}>
@@ -152,11 +104,7 @@ export function FileVideoPlayer({
       {!ready && !error ? (
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/35 px-4 text-center">
           <div className="size-7 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          <p className="text-xs text-foreground/90">
-            {loadingPct !== null
-              ? polishLabel(`Загрузка ${loadingPct}%…`)
-              : polishLabel("Старт…")}
-          </p>
+          <p className="text-xs text-foreground/90">{polishLabel("Старт…")}</p>
         </div>
       ) : null}
 

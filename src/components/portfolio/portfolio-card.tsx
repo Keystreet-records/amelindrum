@@ -1,5 +1,5 @@
 import type { PortfolioVideo } from "@/lib/site-content";
-import { isVercelBlobUrl, proxiedMediaUrl } from "@/lib/media-url";
+import { proxiedMediaUrl } from "@/lib/media-url";
 import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 
@@ -75,7 +75,7 @@ export function PortfolioCard({
 }
 
 function resolveCoverSrc(url: string): string {
-  return isVercelBlobUrl(url) ? proxiedMediaUrl(url) : url;
+  return proxiedMediaUrl(url);
 }
 
 function PortfolioCoverImage({
