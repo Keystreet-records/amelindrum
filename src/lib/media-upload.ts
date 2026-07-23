@@ -149,24 +149,6 @@ export async function uploadSiteMedia(
       throw new Error("Хранилище не вернуло URL файла");
     }
 
-    // Confirm the object is publicly reachable before we hand the URL to CMS.
-    try {
-      const probe = await fetch(blob.url, { method: "HEAD", mode: "cors" });
-      if (!probe.ok) {
-        throw new Error(`Файл загружен, но недоступен (HTTP ${probe.status})`);
-      }
-    } catch (probeErr) {
-      // Some environments block HEAD; fall back to a ranged GET of 1 byte.
-      if (probeErr instanceof Error && /недоступен/i.test(probeErr.message)) throw probeErr;
-      const ranged = await fetch(blob.url, {
-        headers: { Range: "bytes=0-0" },
-        mode: "cors",
-      });
-      if (!(ranged.ok || ranged.status === 206)) {
-        throw new Error(`Файл загружен, но недоступен (HTTP ${ranged.status})`);
-      }
-    }
-
     options.onProgress?.({ phase: "done", loaded: total, total, percentage: 100 });
     return {
       url: blob.url,
