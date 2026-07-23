@@ -91,23 +91,36 @@ export function PortfolioVideoModal({ video, onClose }: PortfolioVideoModalProps
           </svg>
         </button>
         <div className="relative aspect-video bg-black">
-          {fileUrl && playerReady ? (
-            <FileVideoPlayer
-              src={fileUrl}
-              title={video.title}
-              className="absolute inset-0 h-full w-full"
-              autoPlay
-            />
-          ) : embed && playerReady ? (
-            <iframe
-              src={embed}
-              title={video.title}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              allowFullScreen
-              referrerPolicy="strict-origin-when-cross-origin"
-              loading="eager"
-              className="h-full w-full border-0"
-            />
+          {fileUrl ? (
+            playerReady ? (
+              <FileVideoPlayer
+                src={fileUrl}
+                title={video.title}
+                className="absolute inset-0 h-full w-full"
+                autoPlay
+              />
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center gap-2">
+                <div className="size-7 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                <p className="text-xs text-foreground/90">{polishLabel("Старт…")}</p>
+              </div>
+            )
+          ) : embed ? (
+            playerReady ? (
+              <iframe
+                src={embed}
+                title={video.title}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+                referrerPolicy="strict-origin-when-cross-origin"
+                loading="eager"
+                className="h-full w-full border-0"
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center">
+                <div className="size-7 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              </div>
+            )
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
               <p className="text-lg font-medium text-foreground">{video.title}</p>

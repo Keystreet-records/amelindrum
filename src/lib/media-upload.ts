@@ -172,4 +172,31 @@ export async function uploadSiteMedia(
   }
 }
 
+/** Delete a previously uploaded portfolio media file from Vercel Blob. */
+export async function deleteSiteMedia(url: string): Promise<void> {
+  const trimmed = url.trim();
+  if (!trimmed) return;
+
+  const token = await getAccessToken();
+  const res = await fetch("/api/media-delete", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ url: trimmed }),
+  });
+
+  if (!res.ok) {
+    let message = "Не удалось удалить файл из хранилища";
+    try {
+      const payload = (await res.json()) as { error?: string };
+      if (payload.error) message = payload.error;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(formatMediaUploadError(new Error(message), message));
+  }
+}
+
 export { VIDEO_MAX_BYTES, VIDEO_MAX_MB };

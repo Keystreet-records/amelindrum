@@ -32,7 +32,7 @@ import {
 import { FileVideoPlayer } from "@/components/portfolio/file-video-player";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { uploadSiteMedia, type MediaKind, VIDEO_MAX_BYTES, VIDEO_MAX_MB } from "@/lib/media-upload";
+import { uploadSiteMedia, deleteSiteMedia, type MediaKind, VIDEO_MAX_BYTES, VIDEO_MAX_MB } from "@/lib/media-upload";
 import { polishLabel } from "@/lib/typography";
 
 const DEFAULT_PORTRAIT = "/media/portrait.jpg";
@@ -961,11 +961,19 @@ function VideoFileEditor({
     }
 
     try {
+      const previousUrl = video.url.trim();
       const result = await runUpload(file, {
         kind: "video",
         folder: "portfolio/videos",
       });
       onChange(result.url);
+      if (previousUrl && previousUrl !== result.url) {
+        try {
+          await deleteSiteMedia(previousUrl);
+        } catch {
+          /* old blob may stay orphaned — new file is already linked */
+        }
+      }
       const sizeMb = (result.size / (1024 * 1024)).toFixed(1);
       const base = result.remuxed
         ? `Видео оптимизировано для мгновенного старта и загружено (${sizeMb} МБ).`
@@ -1041,11 +1049,23 @@ function VideoFileEditor({
             variant="ghost"
             size="sm"
             disabled={uploading}
-            onClick={() => {
+            onClick={async () => {
+              const previousUrl = video.url.trim();
+              setError(null);
+              setInfo(null);
               onChange("");
               clearTimeline();
-              setError(null);
-              setInfo("Видео убрано. Нажмите «Сохранить».");
+              if (previousUrl) {
+                try {
+                  await deleteSiteMedia(previousUrl);
+                  setInfo("Видео удалено из хранилища. Нажмите «Сохранить».");
+                } catch (err: unknown) {
+                  setInfo("Ссылка убрана. Нажмите «Сохранить».");
+                  setError(errorMessage(err, "Файл в хранилище не удалось удалить"));
+                }
+              } else {
+                setInfo("Видео убрано. Нажмите «Сохранить».");
+              }
             }}
             className="text-muted-foreground hover:text-red-400"
           >

@@ -13,6 +13,7 @@ import { Route as BrandbookRouteImport } from './routes/brandbook'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiUploadRouteImport } from './routes/api/upload'
+import { Route as ApiMediaDeleteRouteImport } from './routes/api/media-delete'
 
 const BrandbookRoute = BrandbookRouteImport.update({
   id: '/brandbook',
@@ -34,17 +35,24 @@ const ApiUploadRoute = ApiUploadRouteImport.update({
   path: '/api/upload',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiMediaDeleteRoute = ApiMediaDeleteRouteImport.update({
+  id: '/api/media-delete',
+  path: '/api/media-delete',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/brandbook': typeof BrandbookRoute
+  '/api/media-delete': typeof ApiMediaDeleteRoute
   '/api/upload': typeof ApiUploadRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/brandbook': typeof BrandbookRoute
+  '/api/media-delete': typeof ApiMediaDeleteRoute
   '/api/upload': typeof ApiUploadRoute
 }
 export interface FileRoutesById {
@@ -52,20 +60,28 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/brandbook': typeof BrandbookRoute
+  '/api/media-delete': typeof ApiMediaDeleteRoute
   '/api/upload': typeof ApiUploadRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/brandbook' | '/api/upload'
+  fullPaths: '/' | '/admin' | '/brandbook' | '/api/media-delete' | '/api/upload'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/brandbook' | '/api/upload'
-  id: '__root__' | '/' | '/admin' | '/brandbook' | '/api/upload'
+  to: '/' | '/admin' | '/brandbook' | '/api/media-delete' | '/api/upload'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/brandbook'
+    | '/api/media-delete'
+    | '/api/upload'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
   BrandbookRoute: typeof BrandbookRoute
+  ApiMediaDeleteRoute: typeof ApiMediaDeleteRoute
   ApiUploadRoute: typeof ApiUploadRoute
 }
 
@@ -99,6 +115,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiUploadRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/media-delete': {
+      id: '/api/media-delete'
+      path: '/api/media-delete'
+      fullPath: '/api/media-delete'
+      preLoaderRoute: typeof ApiMediaDeleteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -106,6 +129,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
   BrandbookRoute: BrandbookRoute,
+  ApiMediaDeleteRoute: ApiMediaDeleteRoute,
   ApiUploadRoute: ApiUploadRoute,
 }
 export const routeTree = rootRouteImport
