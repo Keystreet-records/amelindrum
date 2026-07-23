@@ -136,7 +136,7 @@ export async function uploadSiteMedia(
     const blob = await upload(pathname, uploadFile, {
       access: "public",
       handleUploadUrl: "/api/upload",
-      multipart: options.kind === "video" || uploadFile.size > 4 * 1024 * 1024,
+      multipart: uploadFile.size > 80 * 1024 * 1024,
       contentType,
       clientPayload: JSON.stringify({ kind: options.kind }),
       headers: {

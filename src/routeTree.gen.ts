@@ -13,6 +13,7 @@ import { Route as BrandbookRouteImport } from './routes/brandbook'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiUploadRouteImport } from './routes/api/upload'
+import { Route as ApiMediaProxyRouteImport } from './routes/api/media-proxy'
 import { Route as ApiMediaDeleteRouteImport } from './routes/api/media-delete'
 
 const BrandbookRoute = BrandbookRouteImport.update({
@@ -35,6 +36,11 @@ const ApiUploadRoute = ApiUploadRouteImport.update({
   path: '/api/upload',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiMediaProxyRoute = ApiMediaProxyRouteImport.update({
+  id: '/api/media-proxy',
+  path: '/api/media-proxy',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiMediaDeleteRoute = ApiMediaDeleteRouteImport.update({
   id: '/api/media-delete',
   path: '/api/media-delete',
@@ -46,6 +52,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRoute
   '/brandbook': typeof BrandbookRoute
   '/api/media-delete': typeof ApiMediaDeleteRoute
+  '/api/media-proxy': typeof ApiMediaProxyRoute
   '/api/upload': typeof ApiUploadRoute
 }
 export interface FileRoutesByTo {
@@ -53,6 +60,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminRoute
   '/brandbook': typeof BrandbookRoute
   '/api/media-delete': typeof ApiMediaDeleteRoute
+  '/api/media-proxy': typeof ApiMediaProxyRoute
   '/api/upload': typeof ApiUploadRoute
 }
 export interface FileRoutesById {
@@ -61,19 +69,33 @@ export interface FileRoutesById {
   '/admin': typeof AdminRoute
   '/brandbook': typeof BrandbookRoute
   '/api/media-delete': typeof ApiMediaDeleteRoute
+  '/api/media-proxy': typeof ApiMediaProxyRoute
   '/api/upload': typeof ApiUploadRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/brandbook' | '/api/media-delete' | '/api/upload'
+  fullPaths:
+    | '/'
+    | '/admin'
+    | '/brandbook'
+    | '/api/media-delete'
+    | '/api/media-proxy'
+    | '/api/upload'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/brandbook' | '/api/media-delete' | '/api/upload'
+  to:
+    | '/'
+    | '/admin'
+    | '/brandbook'
+    | '/api/media-delete'
+    | '/api/media-proxy'
+    | '/api/upload'
   id:
     | '__root__'
     | '/'
     | '/admin'
     | '/brandbook'
     | '/api/media-delete'
+    | '/api/media-proxy'
     | '/api/upload'
   fileRoutesById: FileRoutesById
 }
@@ -82,6 +104,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRoute
   BrandbookRoute: typeof BrandbookRoute
   ApiMediaDeleteRoute: typeof ApiMediaDeleteRoute
+  ApiMediaProxyRoute: typeof ApiMediaProxyRoute
   ApiUploadRoute: typeof ApiUploadRoute
 }
 
@@ -115,6 +138,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiUploadRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/media-proxy': {
+      id: '/api/media-proxy'
+      path: '/api/media-proxy'
+      fullPath: '/api/media-proxy'
+      preLoaderRoute: typeof ApiMediaProxyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/media-delete': {
       id: '/api/media-delete'
       path: '/api/media-delete'
@@ -130,6 +160,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRoute,
   BrandbookRoute: BrandbookRoute,
   ApiMediaDeleteRoute: ApiMediaDeleteRoute,
+  ApiMediaProxyRoute: ApiMediaProxyRoute,
   ApiUploadRoute: ApiUploadRoute,
 }
 export const routeTree = rootRouteImport
