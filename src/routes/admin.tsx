@@ -62,7 +62,7 @@ function useUploadTimeline() {
   async function runUpload(
     file: File,
     options: { kind: MediaKind; folder: string },
-  ): Promise<{ url: string; remuxed: boolean; size: number; streamingReady: boolean }> {
+  ): Promise<{ url: string; remuxed: boolean; size: number }> {
     setTimeline({
       fileName: file.name,
       fileSize: file.size,
@@ -100,7 +100,6 @@ function useUploadTimeline() {
         url: result.url,
         remuxed: result.remuxed,
         size: result.size,
-        streamingReady: result.streamingReady,
       };
     } catch (err: unknown) {
       const message = errorMessage(err, "Ошибка загрузки");
@@ -977,9 +976,7 @@ function VideoFileEditor({
       const sizeMb = (result.size / (1024 * 1024)).toFixed(1);
       const base = result.remuxed
         ? `Видео оптимизировано для мгновенного старта и загружено (${sizeMb} МБ).`
-        : result.streamingReady
-          ? `Видео готово к стримингу и загружено (${sizeMb} МБ).`
-          : `Видео загружено (${sizeMb} МБ).`;
+        : `Видео загружено (${sizeMb} МБ).`;
       setInfo(`${base} Не забудьте нажать «Сохранить».`);
     } catch (err: unknown) {
       setError(errorMessage(err, "Ошибка загрузки"));

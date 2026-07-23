@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { VIDEO_MAX_MB } from "@/lib/mp4-faststart";
 import { polishLabel } from "@/lib/typography";
 import { cn } from "@/lib/utils";
 
@@ -9,10 +10,7 @@ type FileVideoPlayerProps = {
   autoPlay?: boolean;
 };
 
-/**
- * Progressive MP4/WebM player: start as soon as metadata is ready,
- * keep buffering ahead while playing (hosting-style progressive download).
- */
+/** Progressive MP4/WebM: start on metadata, buffer while playing. */
 export function FileVideoPlayer({
   src,
   title,
@@ -22,8 +20,8 @@ export function FileVideoPlayer({
   const videoRef = useRef<HTMLVideoElement>(null);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [bufferPct, setBufferPct] = useState(0);
   const [waiting, setWaiting] = useState(false);
+  const [retryTick, setRetryTick] = useState(0);
 
   useEffect(() => {
     const el = videoRef.current;
@@ -32,31 +30,17 @@ export function FileVideoPlayer({
     let cancelled = false;
     setReady(false);
     setError(null);
-    setBufferPct(0);
     setWaiting(false);
 
     el.src = src;
     el.preload = "auto";
-
-    const updateBuffer = () => {
-      if (cancelled || !el.duration || !Number.isFinite(el.duration)) return;
-      try {
-        if (el.buffered.length > 0) {
-          const end = el.buffered.end(el.buffered.length - 1);
-          setBufferPct(Math.min(100, Math.round((end / el.duration) * 100)));
-        }
-      } catch {
-        /* ignore */
-      }
-    };
 
     const onReady = () => {
       if (cancelled) return;
       setReady(true);
       setError(null);
       if (autoPlay) {
-        const play = el.play();
-        if (play && typeof play.catch === "function") play.catch(() => undefined);
+        void el.play().catch(() => undefined);
       }
     };
 
@@ -66,15 +50,13 @@ export function FileVideoPlayer({
       if (cancelled) return;
       setError(
         polishLabel(
-          "Не удалось проиграть видео. Нужен MP4 (H.264 + AAC) до 100 МБ, оптимимизированный для веба.",
+          `Не удалось проиграть видео. Нужен MP4 (H.264 + AAC) до ${VIDEO_MAX_MB} МБ, оптимизированный для веба.`,
         ),
       );
     };
 
     el.addEventListener("loadedmetadata", onReady);
     el.addEventListener("canplay", onReady);
-    el.addEventListener("progress", updateBuffer);
-    el.addEventListener("timeupdate", updateBuffer);
     el.addEventListener("waiting", onWaiting);
     el.addEventListener("playing", onPlaying);
     el.addEventListener("error", onError);
@@ -91,13 +73,11 @@ export function FileVideoPlayer({
       cancelled = true;
       el.removeEventListener("loadedmetadata", onReady);
       el.removeEventListener("canplay", onReady);
-      el.removeEventListener("progress", updateBuffer);
-      el.removeEventListener("timeupdate", updateBuffer);
       el.removeEventListener("waiting", onWaiting);
       el.removeEventListener("playing", onPlaying);
       el.removeEventListener("error", onError);
     };
-  }, [src, autoPlay]);
+  }, [src, autoPlay, retryTick]);
 
   return (
     <div className={cn("relative overflow-hidden bg-black", className)}>
@@ -109,15 +89,6 @@ export function FileVideoPlayer({
         title={title}
         className="h-full w-full"
       />
-
-      {ready && bufferPct < 100 ? (
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-white/10" aria-hidden>
-          <div
-            className="h-full bg-primary/80 transition-[width] duration-300"
-            style={{ width: `${bufferPct}%` }}
-          />
-        </div>
-      ) : null}
 
       {!ready && !error ? (
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/35 px-4 text-center">
@@ -139,14 +110,7 @@ export function FileVideoPlayer({
             <button
               type="button"
               className="rounded-full bg-ember px-4 py-2 text-sm font-medium text-primary-foreground"
-              onClick={() => {
-                setError(null);
-                setReady(false);
-                const el = videoRef.current;
-                if (!el) return;
-                el.src = src;
-                el.load();
-              }}
+              onClick={() => setRetryTick((n) => n + 1)}
             >
               {polishLabel("Повторить")}
             </button>

@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { requireAdminFromRequest } from "@/lib/admin-auth.server";
+import { VIDEO_MAX_BYTES } from "@/lib/mp4-faststart";
 
 const IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"] as const;
 const VIDEO_TYPES = ["video/mp4", "video/webm", "video/quicktime", "video/x-m4v"] as const;
@@ -42,7 +43,7 @@ export const Route = createFileRoute("/api/upload")({
               }
 
               const allowedContentTypes = kind === "video" ? [...VIDEO_TYPES] : [...IMAGE_TYPES];
-              const maximumSizeInBytes = kind === "video" ? 100 * 1024 * 1024 : 5 * 1024 * 1024;
+              const maximumSizeInBytes = kind === "video" ? VIDEO_MAX_BYTES : 5 * 1024 * 1024;
 
               return {
                 allowedContentTypes,
@@ -50,9 +51,6 @@ export const Route = createFileRoute("/api/upload")({
                 addRandomSuffix: true,
                 tokenPayload: JSON.stringify({ pathname, kind }),
               };
-            },
-            onUploadCompleted: async () => {
-              // Client already receives the blob URL; CMS save is separate.
             },
           });
 

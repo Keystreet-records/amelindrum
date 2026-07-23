@@ -15,7 +15,6 @@ type PortfolioVideoModalProps = {
 
 export function PortfolioVideoModal({ video, onClose }: PortfolioVideoModalProps) {
   const [closing, setClosing] = useState(false);
-  const [playerReady, setPlayerReady] = useState(false);
   const overlayRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -33,10 +32,7 @@ export function PortfolioVideoModal({ video, onClose }: PortfolioVideoModalProps
   }, [closing, onClose, video]);
 
   useEffect(() => {
-    if (!video) {
-      setPlayerReady(false);
-      return;
-    }
+    if (!video) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") close();
     };
@@ -51,11 +47,6 @@ export function PortfolioVideoModal({ video, onClose }: PortfolioVideoModalProps
   useEffect(() => {
     if (!video || !overlayRef.current || !panelRef.current) return;
     animateVideoModal(overlayRef.current, panelRef.current, "in");
-    const id = window.requestAnimationFrame(() => setPlayerReady(true));
-    return () => {
-      window.cancelAnimationFrame(id);
-      setPlayerReady(false);
-    };
   }, [video]);
 
   if (!video) return null;
@@ -92,35 +83,22 @@ export function PortfolioVideoModal({ video, onClose }: PortfolioVideoModalProps
         </button>
         <div className="relative aspect-video bg-black">
           {fileUrl ? (
-            playerReady ? (
-              <FileVideoPlayer
-                src={fileUrl}
-                title={video.title}
-                className="absolute inset-0 h-full w-full"
-                autoPlay
-              />
-            ) : (
-              <div className="flex h-full flex-col items-center justify-center gap-2">
-                <div className="size-7 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                <p className="text-xs text-foreground/90">{polishLabel("Старт…")}</p>
-              </div>
-            )
+            <FileVideoPlayer
+              src={fileUrl}
+              title={video.title}
+              className="absolute inset-0 h-full w-full"
+              autoPlay
+            />
           ) : embed ? (
-            playerReady ? (
-              <iframe
-                src={embed}
-                title={video.title}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
-                referrerPolicy="strict-origin-when-cross-origin"
-                loading="eager"
-                className="h-full w-full border-0"
-              />
-            ) : (
-              <div className="flex h-full items-center justify-center">
-                <div className="size-7 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-              </div>
-            )
+            <iframe
+              src={embed}
+              title={video.title}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+              referrerPolicy="strict-origin-when-cross-origin"
+              loading="eager"
+              className="h-full w-full border-0"
+            />
           ) : (
             <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
               <p className="text-lg font-medium text-foreground">{video.title}</p>

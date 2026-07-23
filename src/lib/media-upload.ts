@@ -53,7 +53,7 @@ export function formatMediaUploadError(err: unknown, fallback = "Ошибка з
     err instanceof Error && err.message
       ? err.message
       : typeof err === "object" && err && "message" in err && typeof (err as { message?: unknown }).message === "string"
-        ? ((err as { message: string }).message)
+        ? (err as { message: string }).message
         : fallback;
 
   if (/BLOB_READ_WRITE_TOKEN|не задан|503/i.test(message)) {
@@ -89,7 +89,6 @@ export type MediaUploadResult = {
   remuxed: boolean;
   contentType: string;
   size: number;
-  streamingReady: boolean;
 };
 
 /**
@@ -116,14 +115,12 @@ export async function uploadSiteMedia(
 
   let uploadFile = file;
   let remuxed = false;
-  let streamingReady = options.kind !== "video";
 
   if (options.kind === "video") {
     try {
       const prepared = await prepareVideoForUpload(file);
       uploadFile = prepared.file;
       remuxed = prepared.remuxed;
-      streamingReady = prepared.streamingReady;
     } catch (err) {
       throw new Error(formatMediaUploadError(err, "Не удалось подготовить видео"));
     }
@@ -165,7 +162,6 @@ export async function uploadSiteMedia(
       remuxed,
       contentType,
       size: uploadFile.size,
-      streamingReady,
     };
   } catch (err) {
     throw new Error(formatMediaUploadError(err));
