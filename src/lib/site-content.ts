@@ -245,8 +245,11 @@ export function normalizeSiteContent(raw: unknown): SiteContent {
       return {
         ...DEFAULT_CONTENT.portfolio,
         ...portfolioRest,
-        // Pad shorter CMS lists with default example videos so admin/landing stay filled.
-        videos: padPortfolioVideos(normalizePortfolioVideos(incoming.portfolio?.videos)),
+        // Respect CMS length exactly. Only seed defaults when the key is missing.
+        videos: (() => {
+          const normalized = normalizePortfolioVideos(incoming.portfolio?.videos);
+          return normalized === undefined ? DEFAULT_CONTENT.portfolio.videos : normalized;
+        })(),
       };
     })(),
     experience: { ...DEFAULT_CONTENT.experience, ...incoming.experience },
@@ -367,13 +370,6 @@ function normalizePortfolioVideos(incoming?: unknown): PortfolioVideo[] | undefi
       return null;
     })
     .filter(Boolean) as PortfolioVideo[];
-}
-
-function padPortfolioVideos(incoming?: PortfolioVideo[]): PortfolioVideo[] {
-  const defaults = DEFAULT_CONTENT.portfolio.videos;
-  if (!incoming?.length) return defaults;
-  if (incoming.length >= defaults.length) return incoming;
-  return [...incoming, ...defaults.slice(incoming.length)];
 }
 
 /** Coerce CMS typos (@handle, "#") into real https URLs or empty (hide). */

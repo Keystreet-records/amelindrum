@@ -8,5 +8,6 @@ export const siteContentQueryOptions = () =>
   queryOptions({
     queryKey: SITE_CONTENT_QUERY_KEY,
     queryFn: (): Promise<SiteContent> => getPublicSiteContent(),
-    staleTime: 60_000,
+    // Keep short so admin saves show up quickly even without a Realtime event.
+    staleTime: 5_000,
   });
