@@ -101,13 +101,25 @@ function PortfolioCoverImage({
     if (el?.complete && el.naturalWidth > 0) setReady(true);
   }, [src]);
 
+  // R2 sometimes stalls mid-transfer; don't leave a blank card forever.
+  useEffect(() => {
+    if (ready) return;
+    const timer = window.setTimeout(() => {
+      const next = fallback ? resolveCoverSrc(fallback) : "";
+      if (next && src !== next) setSrc(next);
+    }, 8_000);
+    return () => window.clearTimeout(timer);
+  }, [src, ready, fallback]);
+
   return (
     <img
       ref={imgRef}
       src={src}
       alt={alt}
-      loading="eager"
+      /* Lazy: R2 covers can stall; eager images block window `load` → endless tab spinner */
+      loading="lazy"
       decoding="async"
+      fetchPriority="low"
       width={1280}
       height={720}
       className={cn(
