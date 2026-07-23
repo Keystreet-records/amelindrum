@@ -5,7 +5,9 @@ const R2_DEV_HOST_SUFFIX = ".r2.dev";
 /** Contiguous CDN GETs often stall; small Range parts complete reliably. */
 const CHUNK_SIZE = 8 * 1024;
 const CHUNK_RETRIES = 4;
-const BUFFER_UNDER_BYTES = 8 * 1024 * 1024;
+/** Cap what we serve per request so serverless stays fast (browser asks for more). */
+const MAX_CLIENT_RANGE_BYTES = 32 * 1024;
+const BUFFER_UNDER_BYTES = 2 * 1024 * 1024;
 
 function isImageContentType(contentType: string | null): boolean {
   return Boolean(contentType?.toLowerCase().startsWith("image/"));
@@ -176,12 +178,13 @@ async function proxyBlob(request: Request): Promise<Response> {
       return Response.json({ error: "Upstream missing Content-Length" }, { status: 502 });
     }
 
-    const requestedEnd = endToken ? Number(endToken) : Math.min(start + CHUNK_SIZE - 1, total - 1);
+    const requestedEnd = endToken ? Number(endToken) : Math.min(start + MAX_CLIENT_RANGE_BYTES - 1, total - 1);
     if (!Number.isFinite(start) || !Number.isFinite(requestedEnd) || start < 0 || start >= total) {
       return Response.json({ error: "Invalid Range" }, { status: 416 });
     }
 
-    const safeEnd = Math.min(requestedEnd, total - 1);
+    // Never assemble multi-MB ranges in one invocation — CDN stalls and Vercel times out.
+    const safeEnd = Math.min(requestedEnd, start + MAX_CLIENT_RANGE_BYTES - 1, total - 1);
     if (request.method === "HEAD") {
       const headers = copyUpstreamHeaders(
         {
@@ -247,10 +250,9 @@ async function proxyBlob(request: Request): Promise<Response> {
     return new Response(body as BodyInit, { status: 200, headers });
   }
 
-  // Large media: <video>/<audio> often probe with a non-Range GET first.
-  // Serve an initial slice as 206 so the element discovers size + Accept-Ranges.
+  // Large media: serve a small initial slice as 206 so <video> discovers size + Accept-Ranges.
   if (Number.isFinite(total) && total > 0) {
-    const end = Math.min(64 * 1024 - 1, total - 1);
+    const end = Math.min(MAX_CLIENT_RANGE_BYTES - 1, total - 1);
     const body = await fetchBlobBufferedSlice(target, 0, end);
     const partialHeaders = copyUpstreamHeaders(
       {

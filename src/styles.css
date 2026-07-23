@@ -307,13 +307,7 @@
       transform-origin: 50% 40%;
     }
   }
-  /* First paint: hide entrance targets until GSAP boots (no visible→hidden flash) */
-  .landing-root:not([data-motion-boot]) [data-motion],
-  .landing-root[data-motion-boot="pending"] [data-motion],
-  .landing-root:not([data-motion-boot]) [data-reveal],
-  .landing-root[data-motion-boot="pending"] [data-reveal] {
-    opacity: 0;
-  }
+  /* Hero entrance starts slightly scaled; content stays visible without waiting for JS */
   .landing-root:not([data-motion-boot="ready"]):not([data-motion-boot="done"]) [data-hero="image"] {
     transform: scale(1.06);
   }
