@@ -205,10 +205,33 @@ export const DEFAULT_CONTENT: SiteContent = {
   },
 };
 
+/**
+ * List fields: missing/invalid → defaults; present array (incl. empty/shorter) → keep as-is.
+ * Never pad deleted CMS items back from DEFAULT_CONTENT — that broke admin→site sync.
+ */
+function pickStringList(incoming: unknown, fallback: string[]): string[] {
+  if (!Array.isArray(incoming)) return fallback;
+  return incoming.filter((item): item is string => typeof item === "string");
+}
+
+function pickMappedList<T>(
+  incoming: unknown,
+  fallback: T[],
+  mapItem: (item: unknown) => T | null,
+): T[] {
+  if (!Array.isArray(incoming)) return fallback;
+  return incoming.map(mapItem).filter((item): item is T => item !== null);
+}
+
 /** Strip legacy fields and fill gaps from defaults (e.g. old hero.eyebrow in CMS). */
 export function normalizeSiteContent(raw: unknown): SiteContent {
   const incoming = (raw && typeof raw === "object" ? raw : {}) as Partial<SiteContent> & {
     hero?: Partial<SiteContent["hero"]> & { eyebrow?: unknown };
+    about?: Partial<SiteContent["about"]>;
+    services?: Partial<SiteContent["services"]> & { subtitle?: unknown };
+    portfolio?: Partial<SiteContent["portfolio"]> & { subtitle?: unknown };
+    experience?: Partial<SiteContent["experience"]>;
+    contact?: Partial<SiteContent["contact"]>;
   };
 
   const { eyebrow: _legacyHeroEyebrow, ...heroRest } = {
@@ -216,47 +239,80 @@ export function normalizeSiteContent(raw: unknown): SiteContent {
     ...(incoming.hero ?? {}),
   };
 
+  const aboutIn: Partial<SiteContent["about"]> = incoming.about ?? {};
+  const { subtitle: _legacyServicesSubtitle, ...servicesRest } = {
+    ...(incoming.services ?? {}),
+  } as Partial<SiteContent["services"]> & { subtitle?: unknown };
+  const servicesIn: Partial<SiteContent["services"]> = servicesRest;
+  const { subtitle: _legacyPortfolioSubtitle, ...portfolioRest } = {
+    ...(incoming.portfolio ?? {}),
+  } as Partial<SiteContent["portfolio"]> & { subtitle?: unknown };
+  const portfolioIn: Partial<SiteContent["portfolio"]> = portfolioRest;
+  const experienceIn: Partial<SiteContent["experience"]> = incoming.experience ?? {};
+  const contactIn: Partial<SiteContent["contact"]> = incoming.contact ?? {};
+
   const merged: SiteContent = {
     ...DEFAULT_CONTENT,
     ...incoming,
     hero: { ...DEFAULT_CONTENT.hero, ...heroRest },
-    marquee: incoming.marquee ?? DEFAULT_CONTENT.marquee,
+    marquee: pickStringList(incoming.marquee, DEFAULT_CONTENT.marquee),
     about: {
       ...DEFAULT_CONTENT.about,
-      ...incoming.about,
+      ...aboutIn,
       imageUrl: (() => {
-        const value =
-          typeof incoming.about?.imageUrl === "string" ? incoming.about.imageUrl.trim() : "";
+        const value = typeof aboutIn.imageUrl === "string" ? aboutIn.imageUrl.trim() : "";
         return value || DEFAULT_CONTENT.about.imageUrl;
       })(),
+      paragraphs: pickStringList(aboutIn.paragraphs, DEFAULT_CONTENT.about.paragraphs),
+      stats: pickMappedList(aboutIn.stats, DEFAULT_CONTENT.about.stats, (item) => {
+        if (!item || typeof item !== "object") return null;
+        const raw = item as Record<string, unknown>;
+        return {
+          n: typeof raw.n === "string" ? raw.n : "",
+          l: typeof raw.l === "string" ? raw.l : "",
+        };
+      }),
     },
-    services: (() => {
-      const { subtitle: _legacyServicesSubtitle, ...servicesRest } = {
-        ...DEFAULT_CONTENT.services,
-        ...(incoming.services ?? {}),
-      } as SiteContent["services"] & { subtitle?: unknown };
-      return { ...DEFAULT_CONTENT.services, ...servicesRest };
-    })(),
-    portfolio: (() => {
-      const { subtitle: _legacyPortfolioSubtitle, ...portfolioRest } = {
-        ...DEFAULT_CONTENT.portfolio,
-        ...(incoming.portfolio ?? {}),
-      } as SiteContent["portfolio"] & { subtitle?: unknown };
-      return {
-        ...DEFAULT_CONTENT.portfolio,
-        ...portfolioRest,
-        // Respect CMS length exactly. Only seed defaults when the key is missing.
-        videos: (() => {
-          const normalized = normalizePortfolioVideos(incoming.portfolio?.videos);
-          return normalized === undefined ? DEFAULT_CONTENT.portfolio.videos : normalized;
-        })(),
-      };
-    })(),
-    experience: { ...DEFAULT_CONTENT.experience, ...incoming.experience },
+    services: {
+      ...DEFAULT_CONTENT.services,
+      ...servicesIn,
+      items: pickMappedList(servicesIn.items, DEFAULT_CONTENT.services.items, (item) => {
+        if (!item || typeof item !== "object") return null;
+        const raw = item as Record<string, unknown>;
+        return {
+          n: typeof raw.n === "string" ? raw.n : "",
+          t: typeof raw.t === "string" ? raw.t : "",
+          d: typeof raw.d === "string" ? raw.d : "",
+          tags: pickStringList(raw.tags, []),
+        };
+      }),
+    },
+    portfolio: {
+      ...DEFAULT_CONTENT.portfolio,
+      ...portfolioIn,
+      videos: pickMappedList(
+        portfolioIn.videos,
+        DEFAULT_CONTENT.portfolio.videos,
+        (item) => normalizePortfolioVideo(item),
+      ),
+    },
+    experience: {
+      ...DEFAULT_CONTENT.experience,
+      ...experienceIn,
+      items: pickMappedList(experienceIn.items, DEFAULT_CONTENT.experience.items, (item) => {
+        if (!item || typeof item !== "object") return null;
+        const raw = item as Record<string, unknown>;
+        return {
+          y: typeof raw.y === "string" ? raw.y : "",
+          t: typeof raw.t === "string" ? raw.t : "",
+          d: typeof raw.d === "string" ? raw.d : "",
+        };
+      }),
+    },
     contact: {
       ...DEFAULT_CONTENT.contact,
-      ...incoming.contact,
-      socials: normalizeContactSocials(incoming.contact?.socials),
+      ...contactIn,
+      socials: normalizeContactSocials(contactIn.socials),
     },
   };
 
@@ -328,48 +384,41 @@ export function applySiteTypography(content: SiteContent): SiteContent {
   };
 }
 
-function normalizePortfolioVideos(incoming?: unknown): PortfolioVideo[] | undefined {
-  if (!Array.isArray(incoming)) return undefined;
-  return incoming
-    .map((v) => {
-      if (!v || typeof v !== "object") return null;
-      const raw = v as Record<string, unknown>;
-      const title = typeof raw.title === "string" ? raw.title : "";
-      const desc = typeof raw.desc === "string" ? raw.desc : "";
-      const tags = Array.isArray(raw.tags)
-        ? raw.tags.filter((t: unknown): t is string => typeof t === "string")
-        : [];
+function normalizePortfolioVideo(v: unknown): PortfolioVideo | null {
+  if (!v || typeof v !== "object") return null;
+  const raw = v as Record<string, unknown>;
+  const title = typeof raw.title === "string" ? raw.title : "";
+  const desc = typeof raw.desc === "string" ? raw.desc : "";
+  const tags = pickStringList(raw.tags, []);
 
-      // New format
-      if (
-        (raw.source === "youtube" || raw.source === "vk" || raw.source === "file") &&
-        typeof raw.url === "string"
-      ) {
-        return {
-          title,
-          desc,
-          tags,
-          source: raw.source,
-          url: raw.url.trim(),
-          coverUrl: typeof raw.coverUrl === "string" ? raw.coverUrl.trim() : "",
-        } satisfies PortfolioVideo;
-      }
+  // New format
+  if (
+    (raw.source === "youtube" || raw.source === "vk" || raw.source === "file") &&
+    typeof raw.url === "string"
+  ) {
+    return {
+      title,
+      desc,
+      tags,
+      source: raw.source,
+      url: raw.url.trim(),
+      coverUrl: typeof raw.coverUrl === "string" ? raw.coverUrl.trim() : "",
+    } satisfies PortfolioVideo;
+  }
 
-      // Legacy format (CMS/old defaults): youtubeUrl
-      if (typeof raw.youtubeUrl === "string") {
-        return {
-          title,
-          desc,
-          tags,
-          source: "youtube" as const,
-          url: raw.youtubeUrl,
-          coverUrl: typeof raw.coverUrl === "string" ? raw.coverUrl.trim() : "",
-        } satisfies PortfolioVideo;
-      }
+  // Legacy format (CMS/old defaults): youtubeUrl
+  if (typeof raw.youtubeUrl === "string") {
+    return {
+      title,
+      desc,
+      tags,
+      source: "youtube" as const,
+      url: raw.youtubeUrl,
+      coverUrl: typeof raw.coverUrl === "string" ? raw.coverUrl.trim() : "",
+    } satisfies PortfolioVideo;
+  }
 
-      return null;
-    })
-    .filter(Boolean) as PortfolioVideo[];
+  return null;
 }
 
 /** Coerce CMS typos (@handle, "#") into real https URLs or empty (hide). */
@@ -390,34 +439,17 @@ function normalizeSocialUrl(label: string, url: string): string {
   return trimmed;
 }
 
-function normalizeContactSocials(
-  incoming?: SiteContent["contact"]["socials"],
-): SiteContent["contact"]["socials"] {
-  const defaults = DEFAULT_CONTENT.contact.socials;
-  if (!incoming?.length) return defaults;
-
-  const byLabel = new Map(incoming.map((s) => [s.label.trim().toLowerCase(), s]));
-
-  const core = defaults.map((item) => {
-    const match = byLabel.get(item.label.toLowerCase());
-    // Empty URL is intentional — hides the network on the site.
-    if (match) return { label: item.label, url: normalizeSocialUrl(item.label, match.url) };
-    return { ...item };
+function normalizeContactSocials(incoming?: unknown): SiteContent["contact"]["socials"] {
+  // Same contract as other lists: missing → defaults; [] / shorter → exact CMS list.
+  // Empty URL is intentional — SocialLinks hides that network on the site.
+  return pickMappedList(incoming, DEFAULT_CONTENT.contact.socials, (item) => {
+    if (!item || typeof item !== "object") return null;
+    const raw = item as Record<string, unknown>;
+    const label = typeof raw.label === "string" ? raw.label.trim() : "";
+    if (!label) return null;
+    const url = normalizeSocialUrl(label, typeof raw.url === "string" ? raw.url : "");
+    return { label, url };
   });
-
-  const coreLabels = new Set(defaults.map((d) => d.label.toLowerCase()));
-  const extras = incoming
-    .map((s) => ({
-      label: s.label.trim(),
-      url: normalizeSocialUrl(s.label, s.url ?? ""),
-    }))
-    .filter((s) => {
-      const label = s.label.toLowerCase();
-      if (!label || coreLabels.has(label)) return false;
-      return Boolean(s.url);
-    });
-
-  return [...core, ...extras];
 }
 
 /** Extract YouTube video ID from various URL formats. */
