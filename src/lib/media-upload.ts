@@ -1,5 +1,5 @@
-import { upload } from "@vercel/blob/client";
 import { supabase } from "@/integrations/supabase/client";
+import { isVercelBlobUrl } from "@/lib/media-url";
 import { prepareVideoForUpload, VIDEO_MAX_BYTES, VIDEO_MAX_MB } from "@/lib/mp4-faststart";
 
 export type MediaKind = "image" | "video";
@@ -47,7 +47,7 @@ function contentTypeFor(file: File, kind: MediaKind): string {
   return "image/jpeg";
 }
 
-/** Map Blob/client errors to clear Russian messages for the admin UI. */
+/** Map R2/client errors to clear Russian messages for the admin UI. */
 export function formatMediaUploadError(err: unknown, fallback = "Ошибка загрузки"): string {
   const message =
     err instanceof Error && err.message
@@ -56,22 +56,22 @@ export function formatMediaUploadError(err: unknown, fallback = "Ошибка з
         ? (err as { message: string }).message
         : fallback;
 
-  if (/BLOB_READ_WRITE_TOKEN|не задан|503/i.test(message)) {
-    return "Хранилище Vercel Blob не настроено. В Vercel создайте Blob Store — токен BLOB_READ_WRITE_TOKEN подтянется сам.";
+  if (/R2_|Cloudflare R2|не настроен|503/i.test(message)) {
+    return "Хранилище Cloudflare R2 не настроено. Задайте R2_* переменные в Vercel / .env.";
   }
-  if (/failed to retrieve the client token|unauthorized|forbidden|войдите/i.test(message)) {
+  if (/failed to retrieve|unauthorized|forbidden|войдите/i.test(message)) {
     return "Не удалось авторизовать загрузку. Обновите страницу и войдите в админку снова.";
   }
   if (/memory|array buffer|allocation|out of memory/i.test(message)) {
     return `Не хватило памяти в браузере. Закройте лишние вкладки и загрузите файл до ${VIDEO_MAX_MB} МБ.`;
   }
-  if (/network|failed to fetch|timeout|aborted/i.test(message)) {
-    return "Сеть оборвалась во время загрузки. Проверьте интернет и повторите.";
+  if (/network|failed to fetch|timeout|aborted|cors/i.test(message)) {
+    return "Сеть оборвалась или CORS на R2 не разрешает загрузку. Проверьте интернет и CORS bucket.";
   }
-  if (/content.?type|not allowed|invalid.*type/i.test(message)) {
+  if (/content.?type|not allowed|invalid.*type|формат/i.test(message)) {
     return "Формат файла не принят. Нужен MP4 (H.264), WebM или MOV.";
   }
-  if (/maximumSize|too large|entity too large|413/i.test(message)) {
+  if (/maximumSize|too large|entity too large|413|больше лимита/i.test(message)) {
     return `Файл больше лимита ${VIDEO_MAX_MB} МБ. Сожмите видео и попробуйте снова.`;
   }
   return message || fallback;
@@ -91,8 +91,52 @@ export type MediaUploadResult = {
   size: number;
 };
 
+type PresignResponse = {
+  uploadUrl?: string;
+  publicUrl?: string;
+  key?: string;
+  error?: string;
+};
+
+function putFileWithProgress(
+  uploadUrl: string,
+  file: File,
+  contentType: string,
+  onProgress?: (progress: MediaUploadProgress) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", uploadUrl);
+    xhr.setRequestHeader("Content-Type", contentType);
+
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return;
+      const total = event.total || file.size || 1;
+      const loaded = event.loaded;
+      onProgress?.({
+        phase: "uploading",
+        loaded,
+        total,
+        percentage: Math.min(100, Math.round((loaded / total) * 100)),
+      });
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+        return;
+      }
+      reject(new Error(`R2 отклонил загрузку (HTTP ${xhr.status})`));
+    };
+
+    xhr.onerror = () => reject(new Error("Сеть оборвалась во время загрузки в R2"));
+    xhr.onabort = () => reject(new Error("Загрузка прервана"));
+    xhr.send(file);
+  });
+}
+
 /**
- * Upload media via Vercel Blob.
+ * Upload media to Cloudflare R2 via presigned PUT.
  * Videos are optimized for progressive streaming (faststart) before upload.
  */
 export async function uploadSiteMedia(
@@ -133,32 +177,40 @@ export async function uploadSiteMedia(
 
   try {
     options.onProgress?.({ phase: "uploading", loaded: 0, total, percentage: 0 });
-    const blob = await upload(pathname, uploadFile, {
-      access: "public",
-      handleUploadUrl: "/api/upload",
-      multipart: uploadFile.size > 80 * 1024 * 1024,
-      contentType,
-      clientPayload: JSON.stringify({ kind: options.kind }),
+
+    const presignRes = await fetch("/api/upload", {
+      method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
       },
-      onUploadProgress: ({ loaded, total: progressTotal, percentage }) => {
-        options.onProgress?.({
-          phase: "uploading",
-          loaded,
-          total: progressTotal || total,
-          percentage,
-        });
-      },
+      body: JSON.stringify({
+        pathname,
+        contentType,
+        kind: options.kind,
+        size: uploadFile.size,
+      }),
     });
 
-    if (!blob?.url) {
+    let payload: PresignResponse = {};
+    try {
+      payload = (await presignRes.json()) as PresignResponse;
+    } catch {
+      /* ignore */
+    }
+
+    if (!presignRes.ok) {
+      throw new Error(payload.error || `Не удалось получить URL загрузки (${presignRes.status})`);
+    }
+    if (!payload.uploadUrl || !payload.publicUrl) {
       throw new Error("Хранилище не вернуло URL файла");
     }
 
+    await putFileWithProgress(payload.uploadUrl, uploadFile, contentType, options.onProgress);
+
     options.onProgress?.({ phase: "done", loaded: total, total, percentage: 100 });
     return {
-      url: blob.url,
+      url: payload.publicUrl,
       remuxed,
       contentType,
       size: uploadFile.size,
@@ -168,10 +220,12 @@ export async function uploadSiteMedia(
   }
 }
 
-/** Delete a previously uploaded portfolio media file from Vercel Blob. */
+/** Delete a previously uploaded portfolio media file from Cloudflare R2. */
 export async function deleteSiteMedia(url: string): Promise<void> {
   const trimmed = url.trim();
   if (!trimmed) return;
+  // Legacy Vercel Blob URLs are no longer managed — unlinking in CMS is enough.
+  if (isVercelBlobUrl(trimmed)) return;
 
   const token = await getAccessToken();
   const res = await fetch("/api/media-delete", {

@@ -6,209 +6,161 @@ import { prefersReducedMotion, prefersTouchScroll } from "@/lib/motion/prefs";
 
 gsap.registerPlugin(useGSAP, ScrollTrigger);
 
+const HERO_MOTION = "[data-motion='hero-name'], [data-motion='hero-desc'], [data-motion='hero-cta']";
+const SECTION_REVEALS =
+  "[data-reveal='section'], [data-reveal='card'], [data-reveal='row'], [data-reveal='stat'], [data-reveal='portrait']";
+
+function forceVisible(root: HTMLElement) {
+  gsap.set(root.querySelectorAll("[data-motion], [data-reveal]"), {
+    autoAlpha: 1,
+    y: 0,
+    x: 0,
+    scale: 1,
+  });
+  gsap.set(root.querySelectorAll("[data-hero='image']"), { scale: 1 });
+  gsap.set(root.querySelectorAll("[data-hero='veil']"), { autoAlpha: 0 });
+  gsap.set(root.querySelectorAll("[data-hero='sweep']"), { autoAlpha: 0 });
+  root.dataset.motionBoot = "done";
+}
+
 export function useLandingMotion(rootRef: RefObject<HTMLElement | null>) {
   useGSAP(
     () => {
+      const root = rootRef.current;
+      if (!root) return;
+
+      root.dataset.motionBoot = "pending";
+
       if (prefersReducedMotion()) {
-        gsap.set("[data-motion], [data-reveal]", {
-          clearProps: "all",
-          opacity: 1,
-          y: 0,
-          x: 0,
-          scale: 1,
-        });
-        gsap.set("[data-hero='image']", { clearProps: "all" });
+        forceVisible(root);
         return;
       }
 
       const touchScroll = prefersTouchScroll();
-      const isDesktopLayout = window.matchMedia("(min-width: 768px)").matches;
+      let introDone = false;
+
+      const failSafe = window.setTimeout(() => {
+        if (!introDone) forceVisible(root);
+      }, 3500);
+
+      const markDone = () => {
+        introDone = true;
+        window.clearTimeout(failSafe);
+        root.dataset.motionBoot = "done";
+      };
 
       const ctx = gsap.context(() => {
-        gsap.set("[data-motion='hero-name'], [data-motion='hero-desc'], [data-motion='hero-cta']", {
-          opacity: 0,
-        });
+        gsap.set(HERO_MOTION, { autoAlpha: 0, y: 20 });
+        gsap.set(SECTION_REVEALS, { autoAlpha: 0 });
+        gsap.set("[data-reveal='portrait']", { scale: 1.03 });
+        gsap.set("[data-hero='image']", { scale: 1.06 });
+        gsap.set("[data-hero='veil']", { autoAlpha: 0.4 });
+        gsap.set("[data-hero='sweep']", { autoAlpha: 0 });
 
-        gsap.set("[data-reveal='portrait']", { opacity: 0, scale: 1.04 });
-        gsap.set("[data-hero='image']", {
-          scale: 1.12,
-          filter: "brightness(0.55) contrast(1.05)",
-          transformOrigin: isDesktopLayout ? "50% 40%" : "88% 42%",
-        });
-        gsap.set("[data-hero='sweep']", { xPercent: -20, opacity: 0 });
+        root.dataset.motionBoot = "ready";
 
+        // Keep intro on transform/opacity only — no filter, no blend thrash.
         const intro = gsap.timeline({
-          defaults: { ease: "power3.out", duration: 1 },
-          delay: 0.08,
+          defaults: { ease: "power2.out" },
+          onComplete: markDone,
         });
 
         intro
+          .to("[data-hero='image']", { scale: 1, duration: 0.95, ease: "power2.out" }, 0)
+          .to("[data-hero='veil']", { autoAlpha: 0, duration: 0.85 }, 0)
           .to(
-            "[data-hero='image']",
-            {
-              scale: 1,
-              filter: "brightness(1) contrast(1)",
-              duration: 1.55,
-              ease: "power2.out",
-            },
-            0,
-          )
-          .fromTo(
-            "[data-hero='sweep']",
-            { xPercent: -30, opacity: 0 },
-            { xPercent: 380, opacity: 1, duration: 1.15, ease: "power1.inOut" },
-            0.12,
-          )
-          .to("[data-hero='sweep']", { opacity: 0, duration: 0.35 }, "-=0.35")
-          .fromTo(
             "[data-motion='hero-name']",
-            { y: 28, opacity: 0 },
-            { y: 0, opacity: 1, duration: 1.05 },
-            "-=0.75",
+            { autoAlpha: 1, y: 0, duration: 0.7 },
+            0.18,
           )
-          .fromTo(
+          .to(
             "[data-motion='hero-desc']",
-            { y: 26, opacity: 0 },
-            { y: 0, opacity: 1, duration: 0.95 },
-            "-=0.7",
+            { autoAlpha: 1, y: 0, duration: 0.65 },
+            0.3,
           )
-          .fromTo(
+          .to(
             "[data-motion='hero-cta']",
-            { y: 22, opacity: 0 },
-            { y: 0, opacity: 1, duration: 0.85, stagger: 0.1 },
-            "-=0.6",
+            { autoAlpha: 1, y: 0, duration: 0.55, stagger: 0.07 },
+            0.42,
           );
 
-        // Scrubbed transforms under the finger lock iOS Safari scroll — keep on desktop only.
         if (!touchScroll) {
           gsap.to("[data-parallax='hero-image']", {
-            y: 140,
+            y: 120,
             ease: "none",
             scrollTrigger: {
               trigger: "#top",
               start: "top top",
               end: "bottom top",
-              scrub: 0.75,
+              scrub: 0.6,
             },
           });
 
           gsap.to("[data-parallax='hero-content']", {
-            y: -48,
+            y: -40,
             ease: "none",
             scrollTrigger: {
               trigger: "#top",
               start: "top top",
               end: "65% top",
-              scrub: 0.45,
+              scrub: 0.4,
             },
           });
         }
 
         gsap.to("[data-fade='hero-text']", {
-          opacity: 0,
+          autoAlpha: 0,
           ease: "none",
           scrollTrigger: {
             trigger: "#top",
             start: "top top",
             end: "65% top",
-            scrub: touchScroll ? true : 0.45,
+            scrub: touchScroll ? true : 0.4,
           },
         });
 
-        ScrollTrigger.batch("[data-reveal='section']", {
-          start: "top 88%",
-          once: true,
-          onEnter: (elements) => {
-            gsap.fromTo(
-              elements,
-              { y: 44, opacity: 0 },
-              {
+        const revealBatch = (
+          selector: string,
+          from: gsap.TweenVars,
+          duration: number,
+          stagger: number,
+          start = "top 90%",
+        ) => {
+          ScrollTrigger.batch(selector, {
+            start,
+            once: true,
+            onEnter: (elements) => {
+              gsap.fromTo(elements, from, {
+                autoAlpha: 1,
                 y: 0,
-                opacity: 1,
-                duration: 1,
-                stagger: 0.09,
-                ease: "power2.out",
-                overwrite: "auto",
-              },
-            );
-          },
-        });
-
-        ScrollTrigger.batch("[data-reveal='card']", {
-          start: "top 91%",
-          once: true,
-          onEnter: (elements) => {
-            gsap.fromTo(
-              elements,
-              { y: 52, opacity: 0, scale: 0.985 },
-              {
-                y: 0,
-                opacity: 1,
-                scale: 1,
-                duration: 0.95,
-                stagger: 0.13,
-                ease: "power2.out",
-                overwrite: "auto",
-              },
-            );
-          },
-        });
-
-        ScrollTrigger.batch("[data-reveal='row']", {
-          start: "top 93%",
-          once: true,
-          onEnter: (elements) => {
-            gsap.fromTo(
-              elements,
-              { x: -20, opacity: 0 },
-              {
                 x: 0,
-                opacity: 1,
-                duration: 0.8,
-                stagger: 0.07,
-                ease: "power2.out",
-                overwrite: "auto",
-              },
-            );
-          },
-        });
-
-        ScrollTrigger.batch("[data-reveal='stat']", {
-          start: "top 92%",
-          once: true,
-          onEnter: (elements) => {
-            gsap.fromTo(
-              elements,
-              { y: 18, opacity: 0 },
-              {
-                y: 0,
-                opacity: 1,
-                duration: 0.75,
-                stagger: 0.1,
-                ease: "power2.out",
-                overwrite: "auto",
-              },
-            );
-          },
-        });
-
-        ScrollTrigger.batch("[data-reveal='portrait']", {
-          start: "top bottom",
-          once: true,
-          onEnter: (elements) => {
-            gsap.fromTo(
-              elements,
-              { scale: 1.04, opacity: 0 },
-              {
                 scale: 1,
-                opacity: 1,
-                duration: 1.1,
+                duration,
+                stagger,
                 ease: "power2.out",
                 overwrite: "auto",
-              },
-            );
-          },
-        });
+              });
+            },
+          });
+        };
+
+        revealBatch("[data-reveal='section']", { y: 28, autoAlpha: 0 }, 0.7, 0.07, "top 88%");
+        revealBatch(
+          "[data-reveal='card']",
+          { y: 32, autoAlpha: 0, scale: 0.99 },
+          0.7,
+          0.09,
+          "top 91%",
+        );
+        revealBatch("[data-reveal='row']", { x: -14, autoAlpha: 0 }, 0.6, 0.05, "top 93%");
+        revealBatch("[data-reveal='stat']", { y: 14, autoAlpha: 0 }, 0.55, 0.07, "top 92%");
+        revealBatch(
+          "[data-reveal='portrait']",
+          { scale: 1.03, autoAlpha: 0 },
+          0.85,
+          0,
+          "top bottom",
+        );
 
         gsap.to("[data-parallax='marquee']", {
           opacity: 0.55,
@@ -220,13 +172,15 @@ export function useLandingMotion(rootRef: RefObject<HTMLElement | null>) {
             scrub: true,
           },
         });
+      }, root);
 
-        ScrollTrigger.refresh();
-      }, rootRef);
-
-      return () => ctx.revert();
+      return () => {
+        window.clearTimeout(failSafe);
+        ctx.revert();
+        delete root.dataset.motionBoot;
+      };
     },
-    { scope: rootRef },
+    { scope: rootRef, dependencies: [] },
   );
 }
 
@@ -242,17 +196,17 @@ export function animateVideoModal(
   }
 
   if (direction === "in") {
-    gsap.set(overlay, { opacity: 0 });
-    gsap.set(panel, { opacity: 0, y: 28, scale: 0.97 });
+    gsap.set(overlay, { autoAlpha: 0 });
+    gsap.set(panel, { autoAlpha: 0, y: 24, scale: 0.98 });
     gsap
       .timeline({ onComplete })
-      .to(overlay, { opacity: 1, duration: 0.35, ease: "power2.out" })
-      .to(panel, { opacity: 1, y: 0, scale: 1, duration: 0.55, ease: "power3.out" }, "-=0.2");
+      .to(overlay, { autoAlpha: 1, duration: 0.3, ease: "power2.out" })
+      .to(panel, { autoAlpha: 1, y: 0, scale: 1, duration: 0.45, ease: "power3.out" }, "-=0.18");
     return;
   }
 
   gsap
     .timeline({ onComplete })
-    .to(panel, { opacity: 0, y: 16, scale: 0.98, duration: 0.28, ease: "power2.in" })
-    .to(overlay, { opacity: 0, duration: 0.25, ease: "power2.in" }, "-=0.12");
+    .to(panel, { autoAlpha: 0, y: 14, scale: 0.98, duration: 0.24, ease: "power2.in" })
+    .to(overlay, { autoAlpha: 0, duration: 0.22, ease: "power2.in" }, "-=0.1");
 }

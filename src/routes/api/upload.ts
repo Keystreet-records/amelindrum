@@ -1,64 +1,88 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { requireAdminFromRequest } from "@/lib/admin-auth.server";
 import { VIDEO_MAX_BYTES } from "@/lib/mp4-faststart";
+import { createPresignedPutUrl, getR2Config, r2MissingEnvMessage } from "@/lib/r2.server";
 
-const IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"] as const;
-const VIDEO_TYPES = ["video/mp4", "video/webm", "video/quicktime", "video/x-m4v"] as const;
+const IMAGE_TYPES = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp"]);
+const VIDEO_TYPES = new Set(["video/mp4", "video/webm", "video/quicktime", "video/x-m4v"]);
+
+type PresignBody = {
+  pathname?: unknown;
+  contentType?: unknown;
+  kind?: unknown;
+  size?: unknown;
+};
 
 export const Route = createFileRoute("/api/upload")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        if (!process.env.BLOB_READ_WRITE_TOKEN) {
-          return Response.json(
-            {
-              error:
-                "BLOB_READ_WRITE_TOKEN не задан. Создайте Blob Store в Vercel и добавьте токен в env.",
-            },
-            { status: 503 },
-          );
+        if (!getR2Config()) {
+          return Response.json({ error: r2MissingEnvMessage() }, { status: 503 });
         }
 
-        let body: HandleUploadBody;
         try {
-          body = (await request.json()) as HandleUploadBody;
+          await requireAdminFromRequest(request);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Unauthorized";
+          const status = /forbidden/i.test(message) ? 403 : 401;
+          return Response.json({ error: message }, { status });
+        }
+
+        let body: PresignBody;
+        try {
+          body = (await request.json()) as PresignBody;
         } catch {
           return Response.json({ error: "Invalid JSON body" }, { status: 400 });
         }
 
-        try {
-          const jsonResponse = await handleUpload({
-            body,
-            request,
-            onBeforeGenerateToken: async (pathname, clientPayload) => {
-              await requireAdminFromRequest(request);
+        const pathname = typeof body.pathname === "string" ? body.pathname.trim() : "";
+        const contentType =
+          typeof body.contentType === "string" ? body.contentType.trim().toLowerCase() : "";
+        const kind = body.kind === "video" ? "video" : "image";
+        const size = typeof body.size === "number" && Number.isFinite(body.size) ? body.size : 0;
 
-              let kind: "image" | "video" = "image";
-              try {
-                const payload = clientPayload ? JSON.parse(clientPayload) : {};
-                if (payload.kind === "video") kind = "video";
-              } catch {
-                // ignore bad payload — default to image
-              }
+        if (!pathname || !contentType) {
+          return Response.json({ error: "Нужны pathname и contentType" }, { status: 400 });
+        }
 
-              const allowedContentTypes = kind === "video" ? [...VIDEO_TYPES] : [...IMAGE_TYPES];
-              const maximumSizeInBytes = kind === "video" ? VIDEO_MAX_BYTES : 5 * 1024 * 1024;
-
-              return {
-                allowedContentTypes,
-                maximumSizeInBytes,
-                addRandomSuffix: true,
-                tokenPayload: JSON.stringify({ pathname, kind }),
-              };
+        const allowed = kind === "video" ? VIDEO_TYPES : IMAGE_TYPES;
+        if (!allowed.has(contentType)) {
+          return Response.json(
+            {
+              error:
+                kind === "video"
+                  ? "Формат видео не принят. Нужен MP4, WebM или MOV."
+                  : "Формат изображения не принят. Нужен JPEG, PNG или WebP.",
             },
-          });
+            { status: 400 },
+          );
+        }
 
-          return Response.json(jsonResponse);
+        const maxBytes = kind === "video" ? VIDEO_MAX_BYTES : 5 * 1024 * 1024;
+        if (size > maxBytes) {
+          return Response.json(
+            {
+              error:
+                kind === "video"
+                  ? `Файл больше лимита ${Math.floor(VIDEO_MAX_BYTES / (1024 * 1024))} МБ.`
+                  : "Изображение больше 5 МБ.",
+            },
+            { status: 400 },
+          );
+        }
+
+        try {
+          const suffix = crypto.randomUUID().slice(0, 8);
+          const stamped = pathname.replace(/(\.[a-z0-9]+)$/i, `-${suffix}$1`);
+          const result = await createPresignedPutUrl({
+            key: stamped,
+            contentType,
+          });
+          return Response.json(result);
         } catch (error) {
           const message = error instanceof Error ? error.message : "Upload failed";
-          const status = /unauthorized|forbidden/i.test(message) ? 401 : 400;
-          return Response.json({ error: message }, { status });
+          return Response.json({ error: message }, { status: 400 });
         }
       },
     },

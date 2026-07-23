@@ -33,6 +33,8 @@ import { FileVideoPlayer } from "@/components/portfolio/file-video-player";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { uploadSiteMedia, deleteSiteMedia, type MediaKind, VIDEO_MAX_BYTES, VIDEO_MAX_MB } from "@/lib/media-upload";
+import { optimizeImageFile, readImageDimensions } from "@/lib/image-optimize";
+import { proxiedMediaUrl } from "@/lib/media-url";
 import { polishLabel } from "@/lib/typography";
 
 const DEFAULT_PORTRAIT = "/media/portrait.jpg";
@@ -869,22 +871,6 @@ function AdminPage() {
   );
 }
 
-function readImageDimensions(file: File): Promise<{ width: number; height: number }> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      resolve({ width: img.naturalWidth, height: img.naturalHeight });
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error("Не удалось прочитать изображение"));
-    };
-    img.src = url;
-  });
-}
-
 function ArrayEditor<T>({
   items,
   onChange,
@@ -1274,17 +1260,24 @@ function VideoCoverEditor({
         return;
       }
 
-      const ratio = width / height;
-      const target = 16 / 9;
-      if (Math.abs(ratio - target) > 0.12) {
-        setInfo(
-          `Размер ${width}×${height}. Соотношение не 16:9 — в карточке обложка обрежется. Лучше кадрировать заранее.`,
-        );
-      } else {
-        setInfo(`Загружено ${width}×${height}. Не забудьте нажать «Сохранить».`);
-      }
+      const prepared = await optimizeImageFile(file, {
+        aspect: "video",
+        maxWidth: 1280,
+        maxHeight: 720,
+        quality: 0.84,
+        preferWebp: true,
+        fileName: file.name,
+      });
 
-      const publicUrl = (await runUpload(file, { kind: "image", folder: "portfolio" })).url;
+      setInfo(
+        prepared.optimized
+          ? `Готово ${prepared.width}×${prepared.height} (из ${prepared.sourceWidth}×${prepared.sourceHeight}, кадр 16:9). Не забудьте нажать «Сохранить».`
+          : `Загружено ${prepared.width}×${prepared.height}. Не забудьте нажать «Сохранить».`,
+      );
+
+      const publicUrl = (
+        await runUpload(prepared.file, { kind: "image", folder: "portfolio" })
+      ).url;
       onChange(publicUrl);
     } catch (err: unknown) {
       setError(errorMessage(err, "Ошибка загрузки"));
@@ -1296,9 +1289,9 @@ function VideoCoverEditor({
       <div className="grid gap-4 sm:grid-cols-[168px_1fr]">
         <div className="relative mx-auto aspect-video w-full max-w-[168px] overflow-hidden rounded-lg border border-border bg-muted/20 sm:mx-0">
           <img
-            src={displaySrc}
+            src={proxiedMediaUrl(displaySrc)}
             alt={polishLabel("Превью обложки")}
-            className="h-full w-full object-cover"
+            className="absolute inset-0 h-full w-full object-cover object-center"
           />
         </div>
 
@@ -1307,8 +1300,8 @@ function VideoCoverEditor({
             {polishLabel("Сейчас:")} {sourceLabel}.
           </p>
           <p className="text-xs leading-relaxed">
-            {polishLabel("Лучше 16:9")} — 1280×720 или 1920×1080, JPEG/PNG/WebP, от{" "}
-            {COVER_IMAGE_MIN_WIDTH} px, до 5 МБ.
+            {polishLabel("Любой кадр — автоматически обрежем в 16:9")} (до 1280×720, WebP/JPEG). Исходник
+            от {COVER_IMAGE_MIN_WIDTH} px по ширине, до 5 МБ.
           </p>
 
           <div className="flex flex-wrap items-center gap-2">

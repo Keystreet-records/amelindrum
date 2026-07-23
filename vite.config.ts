@@ -12,13 +12,13 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   nitro: {
-    // GitHub → Vercel deploys (Blob uploads require Vercel runtime + BLOB_READ_WRITE_TOKEN)
+    // GitHub → Vercel deploys (media uploads go to Cloudflare R2 via presigned PUT)
     preset: "vercel",
   },
   vite: {
     resolve: {
       alias: {
-        // Avoid ESM crash: @vercel/oidc → @vercel/cli-config → xdg-app-paths (uses require)
+        // Legacy stub if a transitive dep still resolves @vercel/cli-config
         "@vercel/cli-config": path.resolve(root, "src/lib/stubs/vercel-cli-config.ts"),
       },
     },

@@ -19,13 +19,13 @@ export function PortfolioSection({ content, thumbs }: PortfolioSectionProps) {
         <div className="section-header max-w-2xl">
           <p
             data-reveal="section"
-            className="eyebrow text-sm uppercase tracking-[0.35em] text-primary opacity-0"
+            className="eyebrow text-sm uppercase tracking-[0.35em] text-primary"
           >
             {content.eyebrow}
           </p>
           <h2
             data-reveal="section"
-            className="max-w-2xl font-display text-4xl leading-tight opacity-0 md:text-5xl lg:text-6xl"
+            className="max-w-2xl font-display text-4xl leading-tight md:text-5xl lg:text-6xl"
           >
             {content.heading}
           </h2>

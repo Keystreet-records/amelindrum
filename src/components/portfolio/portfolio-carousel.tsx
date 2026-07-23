@@ -70,6 +70,7 @@ export function PortfolioCarousel({ videos, thumbs, onSelect, className }: Portf
                 <PortfolioCard
                   video={video}
                   thumbSrc={resolvePortfolioCover(video, thumbs[index % thumbs.length])}
+                  fallbackSrc={thumbs[index % thumbs.length]}
                   onOpen={() => onSelect(index)}
                   reveal={false}
                 />

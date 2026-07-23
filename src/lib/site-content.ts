@@ -500,7 +500,7 @@ export function buildYoutubeEmbedSrc(
 
   const origin =
     options?.origin ??
-    (typeof window !== "undefined" ? window.location.origin : import.meta.env.VITE_SITE_URL?.replace(/\/$/, ""));
+    (typeof window !== "undefined" ? window.location.origin : undefined);
   if (origin?.startsWith("http")) params.set("origin", origin);
 
   return `${base}?${params.toString()}`;

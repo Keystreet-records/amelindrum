@@ -3,9 +3,11 @@
  * Works around CDNs that stall on large contiguous reads from byte 0.
  */
 
-const CHUNK_SIZE = 64 * 1024;
-const CONCURRENCY = 6;
-const PART_RETRIES = 3;
+/** Proxy Range parts stay small; truncated Blob responses are resumed. */
+const CHUNK_SIZE = 8 * 1024;
+const CONCURRENCY = 2;
+const PART_RETRIES = 6;
+const PART_TIMEOUT_MS = 8_000;
 
 export type RangeLoadProgress = {
   loaded: number;
@@ -13,31 +15,58 @@ export type RangeLoadProgress = {
   percentage: number;
 };
 
-async function fetchRange(
+async function fetchRangeExact(
   url: string,
   start: number,
   end: number,
   signal?: AbortSignal,
 ): Promise<ArrayBuffer> {
+  const expected = end - start + 1;
+  const out = new Uint8Array(expected);
+  let filled = 0;
   let lastError: unknown;
-  for (let attempt = 0; attempt < PART_RETRIES; attempt += 1) {
-    try {
-      const res = await fetch(url, {
-        headers: { Range: `bytes=${start}-${end}` },
-        signal,
-        mode: "cors",
-      });
-      if (!(res.status === 206 || res.status === 200)) {
-        throw new Error(`HTTP ${res.status}`);
+
+  while (filled < expected) {
+    let gotChunk = false;
+
+    for (let attempt = 0; attempt < PART_RETRIES; attempt += 1) {
+      const controller = new AbortController();
+      const onAbort = () => controller.abort();
+      signal?.addEventListener("abort", onAbort, { once: true });
+      const timer = window.setTimeout(() => controller.abort(), PART_TIMEOUT_MS);
+
+      try {
+        const absStart = start + filled;
+        const res = await fetch(url, {
+          headers: { Range: `bytes=${absStart}-${end}` },
+          signal: controller.signal,
+        });
+        if (!(res.status === 206 || res.status === 200)) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        const buf = new Uint8Array(await res.arrayBuffer());
+        if (!buf.byteLength) throw new Error("Empty range body");
+        const copy = Math.min(buf.byteLength, expected - filled);
+        out.set(buf.subarray(0, copy), filled);
+        filled += copy;
+        gotChunk = true;
+        break;
+      } catch (err) {
+        lastError = err;
+        if (signal?.aborted) throw err;
+        await new Promise((r) => setTimeout(r, 160 * (attempt + 1)));
+      } finally {
+        window.clearTimeout(timer);
+        signal?.removeEventListener("abort", onAbort);
       }
-      return await res.arrayBuffer();
-    } catch (err) {
-      lastError = err;
-      if (signal?.aborted) throw err;
-      await new Promise((r) => setTimeout(r, 150 * (attempt + 1)));
+    }
+
+    if (!gotChunk) {
+      throw lastError instanceof Error ? lastError : new Error("Не удалось скачать фрагмент медиа");
     }
   }
-  throw lastError instanceof Error ? lastError : new Error("Не удалось скачать фрагмент видео");
+
+  return out.buffer;
 }
 
 export async function loadMediaObjectUrl(
@@ -49,9 +78,9 @@ export async function loadMediaObjectUrl(
   },
 ): Promise<string> {
   const signal = options?.signal;
-  const head = await fetch(url, { method: "HEAD", signal, mode: "cors" });
+  const head = await fetch(url, { method: "HEAD", signal });
   if (!head.ok) {
-    throw new Error("Не удалось получить размер видео");
+    throw new Error("Не удалось получить размер файла");
   }
 
   const total = Number(head.headers.get("content-length"));
@@ -75,7 +104,7 @@ export async function loadMediaObjectUrl(
   const fetchPart = async (index: number) => {
     const start = index * CHUNK_SIZE;
     const end = Math.min(start + CHUNK_SIZE - 1, total - 1);
-    const buf = await fetchRange(url, start, end, signal);
+    const buf = await fetchRangeExact(url, start, end, signal);
     parts[index] = buf;
     loaded += buf.byteLength;
     report();
@@ -91,7 +120,11 @@ export async function loadMediaObjectUrl(
 
   await Promise.all(workers);
 
-  const type = options?.contentType || head.headers.get("content-type") || "video/mp4";
-  const blob = new Blob(parts, { type });
-  return URL.createObjectURL(blob);
+  const assembled = parts.reduce((sum, part) => sum + part.byteLength, 0);
+  if (assembled !== total) {
+    throw new Error(`Сборка файла неполная (${assembled}/${total})`);
+  }
+
+  const type = options?.contentType || head.headers.get("content-type") || "application/octet-stream";
+  return URL.createObjectURL(new Blob(parts, { type }));
 }

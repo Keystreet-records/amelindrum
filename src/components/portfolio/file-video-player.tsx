@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { VIDEO_MAX_MB } from "@/lib/mp4-faststart";
+import { isVercelBlobUrl, proxiedMediaUrl } from "@/lib/media-url";
 import { polishLabel } from "@/lib/typography";
 import { cn } from "@/lib/utils";
 import { loadMediaObjectUrl } from "@/lib/video-range-loader";
@@ -11,21 +12,17 @@ type FileVideoPlayerProps = {
   autoPlay?: boolean;
 };
 
-function isVercelBlobUrl(url: string): boolean {
-  try {
-    return new URL(url).hostname.endsWith(".public.blob.vercel-storage.com");
-  } catch {
-    return false;
-  }
+function isAbortError(err: unknown): boolean {
+  if (!err) return false;
+  if (err instanceof DOMException && err.name === "AbortError") return true;
+  if (err instanceof Error && /abort/i.test(err.message)) return true;
+  return false;
 }
 
-/** Same-origin proxy avoids flaky direct Blob streaming from some networks. */
-function playableSrc(url: string): string {
-  if (!isVercelBlobUrl(url)) return url;
-  return `/api/media-proxy?u=${encodeURIComponent(url)}`;
-}
-
-/** Progressive player: proxy first, then chunked Range fallback. */
+/**
+ * R2 / CDN / local: play URL directly (browser Range).
+ * Legacy Vercel Blob: assemble via same-origin proxy (Blob full GETs stall).
+ */
 export function FileVideoPlayer({
   src,
   title,
@@ -45,9 +42,7 @@ export function FileVideoPlayer({
 
     let cancelled = false;
     let objectUrl: string | null = null;
-    let phase: "proxy" | "chunked" | "done" = "proxy";
     const ac = new AbortController();
-    const primary = playableSrc(src);
 
     setReady(false);
     setError(null);
@@ -56,7 +51,6 @@ export function FileVideoPlayer({
 
     const markReady = () => {
       if (cancelled) return;
-      phase = "done";
       setReady(true);
       setError(null);
       setLoadingPct(null);
@@ -73,17 +67,11 @@ export function FileVideoPlayer({
     const onWaiting = () => setWaiting(true);
     const onPlaying = () => setWaiting(false);
     const onError = () => {
-      if (cancelled || phase !== "chunked") return;
+      if (cancelled) return;
       fail(
-        `Не удалось проиграть видео. Нужен MP4 (H.264 + AAC) до ${VIDEO_MAX_MB} МБ, оптимизированный для веба.`,
+        `Не удалось проиграть видео. Нужен MP4 (H.264 + AAC) до ${VIDEO_MAX_MB} МБ, с moov в начале файла (faststart).`,
       );
     };
-
-    el.addEventListener("loadedmetadata", markReady);
-    el.addEventListener("canplay", markReady);
-    el.addEventListener("waiting", onWaiting);
-    el.addEventListener("playing", onPlaying);
-    el.addEventListener("error", onError);
 
     const bindSrc = (url: string) => {
       if (cancelled) return;
@@ -97,18 +85,17 @@ export function FileVideoPlayer({
       if (el.readyState >= HTMLMediaElement.HAVE_METADATA) markReady();
     };
 
-    bindSrc(primary);
+    el.addEventListener("loadedmetadata", markReady);
+    el.addEventListener("canplay", markReady);
+    el.addEventListener("waiting", onWaiting);
+    el.addEventListener("playing", onPlaying);
+    el.addEventListener("error", onError);
 
-    const fallbackTimer = window.setTimeout(() => {
-      if (cancelled || el.readyState >= HTMLMediaElement.HAVE_METADATA || phase !== "proxy") {
-        return;
-      }
-
-      // Direct/proxy stream stalled — pull file via small ranges into a local blob.
-      phase = "chunked";
+    if (!isVercelBlobUrl(src)) {
+      bindSrc(src);
+    } else {
       setLoadingPct(0);
-
-      void loadMediaObjectUrl(src, {
+      void loadMediaObjectUrl(proxiedMediaUrl(src), {
         signal: ac.signal,
         contentType: "video/mp4",
         onProgress: (p) => {
@@ -124,18 +111,17 @@ export function FileVideoPlayer({
           bindSrc(url);
         })
         .catch((err) => {
-          if (cancelled || ac.signal.aborted) return;
+          if (cancelled || ac.signal.aborted || isAbortError(err)) return;
           fail(
             err instanceof Error && err.message
               ? err.message
               : `Не удалось загрузить видео (до ${VIDEO_MAX_MB} МБ). Проверьте сеть и формат MP4 H.264.`,
           );
         });
-    }, 3000);
+    }
 
     return () => {
       cancelled = true;
-      window.clearTimeout(fallbackTimer);
       ac.abort();
       el.removeEventListener("loadedmetadata", markReady);
       el.removeEventListener("canplay", markReady);

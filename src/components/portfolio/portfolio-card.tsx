@@ -1,9 +1,13 @@
 import type { PortfolioVideo } from "@/lib/site-content";
+import { isVercelBlobUrl, proxiedMediaUrl } from "@/lib/media-url";
 import { cn } from "@/lib/utils";
+import { useEffect, useRef, useState } from "react";
 
 type PortfolioCardProps = {
   video: PortfolioVideo;
   thumbSrc: string;
+  /** Used when the custom/remote cover fails to decode. */
+  fallbackSrc?: string;
   onOpen: () => void;
   className?: string;
   reveal?: boolean;
@@ -12,6 +16,7 @@ type PortfolioCardProps = {
 export function PortfolioCard({
   video,
   thumbSrc,
+  fallbackSrc,
   onOpen,
   className,
   reveal = true,
@@ -24,18 +29,15 @@ export function PortfolioCard({
       className={cn(
         "portfolio-card group relative flex h-full w-full cursor-pointer flex-col rounded-2xl border border-border bg-card text-left",
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
-        reveal && "opacity-0",
         className,
       )}
     >
-      <div className="portfolio-card__media relative aspect-video overflow-hidden rounded-t-2xl">
-        <img
-          src={thumbSrc}
+      <div className="portfolio-card__media relative aspect-video overflow-hidden rounded-t-2xl bg-muted/30">
+        <PortfolioCoverImage
+          key={thumbSrc}
+          primary={thumbSrc}
+          fallback={fallbackSrc || ""}
           alt={video.title}
-          loading="lazy"
-          width={1280}
-          height={720}
-          className="portfolio-card__thumb h-full w-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-card via-card/25 to-transparent" />
         <div className="absolute inset-0 flex items-center justify-center">
@@ -69,5 +71,55 @@ export function PortfolioCard({
         )}
       </div>
     </button>
+  );
+}
+
+function resolveCoverSrc(url: string): string {
+  return isVercelBlobUrl(url) ? proxiedMediaUrl(url) : url;
+}
+
+function PortfolioCoverImage({
+  primary,
+  fallback,
+  alt,
+}: {
+  primary: string;
+  fallback: string;
+  alt: string;
+}) {
+  const imgRef = useRef<HTMLImageElement>(null);
+  const [src, setSrc] = useState(() => resolveCoverSrc(primary));
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    setSrc(resolveCoverSrc(primary));
+    setReady(false);
+  }, [primary]);
+
+  useEffect(() => {
+    const el = imgRef.current;
+    if (el?.complete && el.naturalWidth > 0) setReady(true);
+  }, [src]);
+
+  return (
+    <img
+      ref={imgRef}
+      src={src}
+      alt={alt}
+      loading="eager"
+      decoding="async"
+      width={1280}
+      height={720}
+      className={cn(
+        "portfolio-card__thumb absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-300",
+        ready ? "opacity-100" : "opacity-0",
+      )}
+      onLoad={() => setReady(true)}
+      onError={() => {
+        setReady(false);
+        const next = fallback ? resolveCoverSrc(fallback) : "";
+        if (next && src !== next) setSrc(next);
+      }}
+    />
   );
 }

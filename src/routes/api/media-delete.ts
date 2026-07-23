@@ -1,34 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { del } from "@vercel/blob";
 import { requireAdminFromRequest } from "@/lib/admin-auth.server";
-
-const BLOB_HOST_SUFFIX = ".public.blob.vercel-storage.com";
-
-function isManagedBlobUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    return (
-      parsed.protocol === "https:" &&
-      parsed.hostname.endsWith(BLOB_HOST_SUFFIX) &&
-      parsed.pathname.includes("/portfolio/")
-    );
-  } catch {
-    return false;
-  }
-}
+import {
+  deleteR2ObjectByPublicUrl,
+  getR2Config,
+  r2MissingEnvMessage,
+} from "@/lib/r2.server";
 
 export const Route = createFileRoute("/api/media-delete")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        if (!process.env.BLOB_READ_WRITE_TOKEN) {
-          return Response.json(
-            {
-              error:
-                "BLOB_READ_WRITE_TOKEN не задан. Создайте Blob Store в Vercel и добавьте токен в env.",
-            },
-            { status: 503 },
-          );
+        if (!getR2Config()) {
+          return Response.json({ error: r2MissingEnvMessage() }, { status: 503 });
         }
 
         try {
@@ -50,22 +33,18 @@ export const Route = createFileRoute("/api/media-delete")({
         if (!url) {
           return Response.json({ error: "Нужен URL файла" }, { status: 400 });
         }
-        if (!isManagedBlobUrl(url)) {
-          return Response.json(
-            { error: "Можно удалять только файлы из нашего Vercel Blob (portfolio)." },
-            { status: 400 },
-          );
-        }
 
         try {
-          await del(url, { token: process.env.BLOB_READ_WRITE_TOKEN });
-          return Response.json({ ok: true });
+          const result = await deleteR2ObjectByPublicUrl(url);
+          if (result === "not_managed") {
+            return Response.json(
+              { error: "Можно удалять только файлы из нашего Cloudflare R2 (portfolio)." },
+              { status: 400 },
+            );
+          }
+          return Response.json({ ok: true, missing: result === "missing" });
         } catch (error) {
           const message = error instanceof Error ? error.message : "Delete failed";
-          // Already gone — treat as success so admin can still clear CMS.
-          if (/not found|404|does not exist/i.test(message)) {
-            return Response.json({ ok: true, missing: true });
-          }
           return Response.json({ error: message }, { status: 400 });
         }
       },

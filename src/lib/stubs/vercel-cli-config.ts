@@ -1,7 +1,6 @@
 /**
  * Stub: @vercel/cli-config pulls xdg-app-paths which uses `require` and
- * crashes under Nitro's ESM serverless bundle. Production Blob auth uses
- * BLOB_READ_WRITE_TOKEN / VERCEL_OIDC_TOKEN from env — CLI config is unused.
+ * crashes under Nitro's ESM serverless bundle. Kept as a safe alias.
  */
 export function getGlobalPathConfig(): string {
   return "/tmp";

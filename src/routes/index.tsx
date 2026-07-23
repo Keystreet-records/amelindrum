@@ -8,23 +8,16 @@ import { useSiteContent } from "@/hooks/use-site-content";
 import { useLandingMotion } from "@/hooks/use-landing-motion";
 import { siteContentQueryOptions } from "@/lib/site-content.query";
 import { scrollToHash } from "@/lib/scroll-to-hash";
+import { proxiedMediaUrl } from "@/lib/media-url";
+import { getPublicSiteUrl } from "@/lib/site-url";
 import type { SiteContent } from "@/lib/site-content";
 
 const HERO_IMG = "/media/hero-cover.jpg";
 const PORTRAIT_IMG = "/media/portrait.jpg";
 const THUMBS = ["/media/video-thumb-1.jpg", "/media/video-thumb-2.jpg", "/media/video-thumb-3.jpg"];
 
-function getSiteUrl() {
-  const configured = import.meta.env.VITE_SITE_URL?.replace(/\/$/, "");
-  if (configured) return configured;
-  if (typeof window !== "undefined") return window.location.origin;
-  return "";
-}
-
 function getOgImageUrl() {
-  const siteUrl = getSiteUrl();
-  if (!siteUrl) return HERO_IMG;
-  return `${siteUrl}${HERO_IMG}`;
+  return `${getPublicSiteUrl()}${HERO_IMG}`;
 }
 
 export const Route = createFileRoute("/")({
@@ -61,7 +54,10 @@ function Index() {
   useLandingMotion(pageRef);
 
   return (
-    <div ref={pageRef} className="min-h-screen text-foreground overflow-x-hidden">
+    <div
+      ref={pageRef}
+      className="landing-root min-h-screen text-foreground overflow-x-hidden"
+    >
       <SiteNav socials={content.contact.socials} />
       <Hero c={content} />
       <Marquee items={content.marquee} />
@@ -91,6 +87,11 @@ function Hero({ c }: { c: SiteContent }) {
           height={683}
           fetchPriority="high"
           draggable={false}
+        />
+        <div
+          data-hero="veil"
+          className="hero-veil absolute inset-0 bg-background"
+          aria-hidden
         />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/45 to-background/15" aria-hidden />
         <div
@@ -178,7 +179,7 @@ function Marquee({ items }: { items: string[] }) {
 }
 
 function About({ c }: { c: SiteContent }) {
-  const portraitSrc = c.about.imageUrl.trim() || PORTRAIT_IMG;
+  const portraitSrc = proxiedMediaUrl(c.about.imageUrl.trim() || PORTRAIT_IMG);
 
   return (
     <section id="about" className="section-tight-top relative section-to-band">
@@ -192,6 +193,7 @@ function About({ c }: { c: SiteContent }) {
               src={portraitSrc}
               alt="Аркадий Амелин с барабанными палочками"
               loading="lazy"
+              decoding="async"
               width={1024}
               height={1536}
               className="h-full w-full object-cover object-[center_28%] scale-[1.04]"
@@ -202,26 +204,26 @@ function About({ c }: { c: SiteContent }) {
         <div className="flex flex-col justify-center">
           <p
             data-reveal="section"
-            className="eyebrow text-sm uppercase tracking-[0.35em] text-primary opacity-0"
+            className="eyebrow text-sm uppercase tracking-[0.35em] text-primary"
           >
             {c.about.eyebrow}
           </p>
           <h2
             data-reveal="section"
-            className="title-gap font-display text-4xl md:text-5xl lg:text-6xl leading-[1.08] opacity-0"
+            className="title-gap font-display text-4xl md:text-5xl lg:text-6xl leading-[1.08]"
           >
             {c.about.heading}
           </h2>
           <div className="stack-gap text-muted-foreground text-base leading-relaxed md:text-lg">
             {c.about.paragraphs.map((p, i) => (
-              <p key={i} data-reveal="section" className="opacity-0">
+              <p key={i} data-reveal="section" className="">
                 {p}
               </p>
             ))}
           </div>
           <div className="mt-8 grid grid-cols-3 gap-3 border-t border-border/70 pt-6 sm:gap-4">
             {c.about.stats.map((s, i) => (
-              <div key={i} data-reveal="stat" className="opacity-0">
+              <div key={i} data-reveal="stat" className="">
                 <div className="font-display text-2xl tabular-nums text-foreground sm:text-3xl md:text-4xl">
                   {s.n}
                 </div>
@@ -244,13 +246,13 @@ function Services({ c }: { c: SiteContent }) {
         <div className="section-header max-w-2xl">
           <p
             data-reveal="section"
-            className="eyebrow text-sm uppercase tracking-[0.35em] text-primary opacity-0"
+            className="eyebrow text-sm uppercase tracking-[0.35em] text-primary"
           >
             {c.services.eyebrow}
           </p>
           <h2
             data-reveal="section"
-            className="font-display text-4xl md:text-5xl lg:text-6xl leading-tight opacity-0"
+            className="font-display text-4xl md:text-5xl lg:text-6xl leading-tight"
           >
             {c.services.heading}
           </h2>
@@ -260,7 +262,7 @@ function Services({ c }: { c: SiteContent }) {
             <article
               key={s.n + s.t}
               data-reveal="card"
-              className="service-card group relative flex h-full flex-col rounded-2xl border border-border bg-card p-6 opacity-0 shadow-card md:p-7"
+              className="service-card group relative flex h-full flex-col rounded-2xl border border-border bg-card p-6 shadow-card md:p-7"
             >
               <div className="font-display text-5xl text-primary/55 transition-colors duration-500 group-hover:text-primary md:text-6xl">
                 {s.n}
@@ -294,13 +296,13 @@ function Experience({ c }: { c: SiteContent }) {
         <div className="section-header max-w-2xl">
           <p
             data-reveal="section"
-            className="eyebrow text-sm uppercase tracking-[0.35em] text-primary opacity-0"
+            className="eyebrow text-sm uppercase tracking-[0.35em] text-primary"
           >
             {c.experience.eyebrow}
           </p>
           <h2
             data-reveal="section"
-            className="font-display text-4xl md:text-5xl lg:text-6xl leading-tight opacity-0"
+            className="font-display text-4xl md:text-5xl lg:text-6xl leading-tight"
           >
             {c.experience.heading}
           </h2>
@@ -310,7 +312,7 @@ function Experience({ c }: { c: SiteContent }) {
             <li
               key={it.y + it.t}
               data-reveal="row"
-              className="experience-row group grid grid-cols-1 gap-1.5 px-3 py-5 opacity-0 sm:grid-cols-12 sm:items-baseline sm:gap-x-6 sm:gap-y-2 sm:px-4 md:px-5 md:py-6"
+              className="experience-row group grid grid-cols-1 gap-1.5 px-3 py-5 sm:grid-cols-12 sm:items-baseline sm:gap-x-6 sm:gap-y-2 sm:px-4 md:px-5 md:py-6"
             >
               <div className="experience-year font-display text-2xl leading-none text-primary tabular-nums sm:col-span-2 md:text-3xl">
                 {it.y}
@@ -335,19 +337,19 @@ function Contact({ c }: { c: SiteContent }) {
       <div className="mx-auto max-w-5xl px-6 text-center">
         <p
           data-reveal="section"
-          className="eyebrow text-sm uppercase tracking-[0.35em] text-primary opacity-0"
+          className="eyebrow text-sm uppercase tracking-[0.35em] text-primary"
         >
           {c.contact.eyebrow}
         </p>
         <h2
           data-reveal="section"
-          className="title-gap font-display text-4xl md:text-6xl lg:text-7xl leading-tight text-balance opacity-0"
+          className="title-gap font-display text-4xl md:text-6xl lg:text-7xl leading-tight text-balance"
         >
           {c.contact.heading}
         </h2>
         <p
           data-reveal="section"
-          className="mx-auto mb-8 max-w-2xl text-muted-foreground text-lg opacity-0"
+          className="mx-auto mb-8 max-w-2xl text-muted-foreground text-lg"
         >
           {c.contact.description}
         </p>
@@ -355,14 +357,14 @@ function Contact({ c }: { c: SiteContent }) {
           <a
             data-reveal="card"
             href={`mailto:${c.contact.email}`}
-            className="btn-soft btn-ember opacity-0 rounded-full px-8 py-4 font-medium text-primary-foreground shadow-glow"
+            className="btn-soft btn-ember rounded-full px-8 py-4 font-medium text-primary-foreground shadow-glow"
           >
             {c.contact.email}
           </a>
           <a
             data-reveal="card"
             href={`tel:${c.contact.phone.replace(/\s/g, "")}`}
-            className="btn-soft opacity-0 rounded-full border border-foreground/40 bg-secondary/40 px-8 py-4 font-medium hover:border-foreground/55 hover:bg-secondary"
+            className="btn-soft rounded-full border border-foreground/40 bg-secondary/40 px-8 py-4 font-medium hover:border-foreground/55 hover:bg-secondary"
           >
             {c.contact.phone}
           </a>
