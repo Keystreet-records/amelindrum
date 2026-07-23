@@ -328,6 +328,8 @@ export function applySiteTypography(content: SiteContent): SiteContent {
     ...content,
     hero: {
       ...content.hero,
+      name1: polishLabel(content.hero.name1),
+      name2: polishLabel(content.hero.name2),
       description: polishBody(content.hero.description),
       ctaPrimary: polishLabel(content.hero.ctaPrimary),
       ctaSecondary: polishLabel(content.hero.ctaSecondary),
@@ -380,6 +382,10 @@ export function applySiteTypography(content: SiteContent): SiteContent {
       eyebrow: polishLabel(content.contact.eyebrow),
       heading: polishTitle(content.contact.heading),
       description: polishBody(content.contact.description),
+      socials: content.contact.socials.map((social) => ({
+        ...social,
+        label: polishLabel(social.label),
+      })),
     },
   };
 }
@@ -422,7 +428,7 @@ function normalizePortfolioVideo(v: unknown): PortfolioVideo | null {
 }
 
 /** Coerce CMS typos (@handle, "#") into real https URLs or empty (hide). */
-function normalizeSocialUrl(label: string, url: string): string {
+export function normalizeSocialUrl(label: string, url: string): string {
   const trimmed = url.trim();
   if (!trimmed || trimmed === "#") return "";
 

@@ -47,6 +47,36 @@ const VIDEO_FILE_TYPES = new Set([
   "video/x-m4v",
 ]);
 
+type AdminSectionId =
+  | "hero"
+  | "marquee"
+  | "about"
+  | "services"
+  | "portfolio"
+  | "experience"
+  | "contact";
+
+const ADMIN_SECTIONS: {
+  id: AdminSectionId;
+  label: string;
+  title: string;
+  description?: string;
+}[] = [
+  { id: "hero", label: "Hero", title: "Первый экран (Hero)" },
+  { id: "marquee", label: "Строка", title: "Бегущая строка" },
+  { id: "about", label: "Обо мне", title: "Обо мне" },
+  { id: "services", label: "Услуги", title: "Услуги" },
+  {
+    id: "portfolio",
+    label: "Портфолио",
+    title: "Портфолио (видео)",
+    description:
+      "Каждая карточка — ролик в карусели. Сначала название и источник, затем файл или ссылка.",
+  },
+  { id: "experience", label: "Опыт", title: "Опыт" },
+  { id: "contact", label: "Контакты", title: "Контакты" },
+];
+
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error && err.message) return err.message;
   if (typeof err === "object" && err && "message" in err) {
@@ -54,6 +84,18 @@ function errorMessage(err: unknown, fallback: string): string {
     if (typeof message === "string" && message) return message;
   }
   return fallback;
+}
+
+/** Remote CDN/Blob URL — safe to schedule for R2/Blob delete after CMS save. */
+function isManagedRemoteMediaUrl(url: string): boolean {
+  const trimmed = url.trim();
+  if (!trimmed || trimmed.startsWith("/") || trimmed.startsWith("data:")) return false;
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
 }
 
 function useUploadTimeline() {
@@ -169,6 +211,22 @@ function AdminPage() {
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loggingIn, setLoggingIn] = useState(false);
+  const [activeSection, setActiveSection] = useState<AdminSectionId>("hero");
+
+  /** Delete from R2 only after successful CMS save (avoid orphans / broken live URLs). */
+  const pendingMediaDeletesRef = useRef<Set<string>>(new Set());
+
+  function scheduleMediaDelete(url: string) {
+    if (!isManagedRemoteMediaUrl(url)) return;
+    pendingMediaDeletesRef.current.add(url.trim());
+  }
+
+  async function flushPendingMediaDeletes() {
+    const urls = [...pendingMediaDeletesRef.current];
+    pendingMediaDeletesRef.current.clear();
+    if (!urls.length) return;
+    await Promise.allSettled(urls.map((url) => deleteSiteMedia(url)));
+  }
 
   async function loadAdmin() {
     setChecking(true);
@@ -226,6 +284,7 @@ function AdminPage() {
       setContent(polished);
       queryClient.setQueryData(["site_content"], polished);
       await queryClient.invalidateQueries({ queryKey: ["site_content"], refetchType: "all" });
+      await flushPendingMediaDeletes();
       setStatus("✓ Сохранено и обновлено на сайте");
     } catch (err: unknown) {
       setStatus("Ошибка сохранения: " + errorMessage(err, "неизвестная ошибка"));
@@ -333,10 +392,18 @@ function AdminPage() {
     setContent(copy);
   };
 
+  const currentSection =
+    ADMIN_SECTIONS.find((section) => section.id === activeSection) ?? ADMIN_SECTIONS[0]!;
+
+  function selectSection(id: AdminSectionId) {
+    setActiveSection(id);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="sticky top-0 z-40 border-b border-border/80 bg-background/90 backdrop-blur-md">
-        <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-5 py-3.5 sm:px-6">
+        <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-5 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3 sm:gap-4">
             <Link
               to="/"
@@ -349,9 +416,11 @@ function AdminPage() {
             </h1>
           </div>
           <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-            {status && (
-              <span className="hidden text-sm text-primary sm:inline">{status}</span>
-            )}
+            {status ? (
+              <span className="hidden max-w-[14rem] truncate text-sm text-primary sm:inline">
+                {status}
+              </span>
+            ) : null}
             <Button
               type="button"
               onClick={save}
@@ -380,15 +449,56 @@ function AdminPage() {
             </Button>
           </div>
         </div>
-        {status && (
+
+        <div className="border-t border-border/50">
+          <nav
+            aria-label={polishLabel("Разделы админки")}
+            className="mx-auto max-w-4xl px-5 sm:px-6"
+          >
+            <div className="-mx-5 flex gap-1 overflow-x-auto px-5 py-2 sm:-mx-0 sm:px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {ADMIN_SECTIONS.map((section) => {
+                const active = section.id === activeSection;
+                return (
+                  <button
+                    key={section.id}
+                    type="button"
+                    onClick={() => selectSection(section.id)}
+                    aria-current={active ? "page" : undefined}
+                    className={
+                      active
+                        ? "shrink-0 rounded-full bg-primary px-3.5 py-1.5 text-sm font-medium text-primary-foreground"
+                        : "shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                    }
+                  >
+                    {polishLabel(section.label)}
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
+        </div>
+
+        {status ? (
           <div className="border-t border-border/50 px-5 py-2 text-sm text-primary sm:hidden">
             {status}
           </div>
-        )}
+        ) : null}
       </header>
 
-      <main className="mx-auto max-w-4xl space-y-8 px-5 py-8 sm:px-6 sm:py-10">
-        <Section title={polishLabel("Первый экран (Hero)")}>
+      <main className="mx-auto max-w-4xl min-w-0 px-5 py-8 sm:px-6 sm:py-10">
+        <div className="mb-6">
+          <h2 className="font-display text-2xl tracking-tight sm:text-3xl">
+            {polishLabel(currentSection.title)}
+          </h2>
+          {currentSection.description ? (
+            <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              {polishLabel(currentSection.description)}
+            </p>
+          ) : null}
+        </div>
+
+        {activeSection === "hero" ? (
+        <Section title={polishLabel(currentSection.title)} hideHeader>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
               label={polishLabel("Имя (строка 1)")}
@@ -440,8 +550,10 @@ function AdminPage() {
             />
           </div>
         </Section>
+        ) : null}
 
-        <Section title={polishLabel("Бегущая строка")}>
+        {activeSection === "marquee" ? (
+        <Section title={polishLabel("Бегущая строка")} hideHeader>
           <ArrayEditor
             itemLabel={polishLabel("Фраза")}
             items={content.marquee}
@@ -454,10 +566,13 @@ function AdminPage() {
             newItem={() => "TEXT"}
           />
         </Section>
+        ) : null}
 
-        <Section title={polishLabel("Обо мне")}>
+        {activeSection === "about" ? (
+        <Section title={polishLabel("Обо мне")} hideHeader>
           <AboutPortraitEditor
             imageUrl={content.about.imageUrl}
+            scheduleMediaDelete={scheduleMediaDelete}
             onChange={(url) =>
               update((d) => {
                 d.about.imageUrl = url;
@@ -526,8 +641,10 @@ function AdminPage() {
             />
           </Subsection>
         </Section>
+        ) : null}
 
-        <Section title={polishLabel("Услуги")}>
+        {activeSection === "services" ? (
+        <Section title={polishLabel("Услуги")} hideHeader>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
               label={polishLabel("Подпись")}
@@ -600,13 +717,10 @@ function AdminPage() {
             />
           </Subsection>
         </Section>
+        ) : null}
 
-        <Section
-          title={polishLabel("Портфолио (видео)")}
-          description={polishLabel(
-            "Каждая карточка — ролик в карусели. Сначала название и источник, затем файл или ссылка.",
-          )}
-        >
+        {activeSection === "portfolio" ? (
+        <Section title={polishLabel("Портфолио (видео)")} hideHeader>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
               label={polishLabel("Подпись")}
@@ -637,6 +751,10 @@ function AdminPage() {
                   d.portfolio.videos = v;
                 })
               }
+              onRemoveItem={(item) => {
+                if (item.source === "file") scheduleMediaDelete(item.url);
+                scheduleMediaDelete(item.coverUrl);
+              }}
               render={(item, set) => (
                 <div className="space-y-4">
                   <Field
@@ -660,6 +778,7 @@ function AdminPage() {
                     ]}
                     onChange={(source) => {
                       if (source === item.source) return;
+                      if (item.source === "file") scheduleMediaDelete(item.url);
                       set({
                         ...item,
                         source,
@@ -678,6 +797,7 @@ function AdminPage() {
                   {item.source === "file" ? (
                     <VideoFileEditor
                       video={item}
+                      scheduleMediaDelete={scheduleMediaDelete}
                       onChange={(url) => set({ ...item, url, source: "file" })}
                     />
                   ) : (
@@ -699,6 +819,7 @@ function AdminPage() {
                   )}
                   <VideoCoverEditor
                     video={item}
+                    scheduleMediaDelete={scheduleMediaDelete}
                     onChange={(coverUrl) => set({ ...item, coverUrl })}
                   />
                   <Field
@@ -729,8 +850,10 @@ function AdminPage() {
             />
           </Subsection>
         </Section>
+        ) : null}
 
-        <Section title={polishLabel("Опыт")}>
+        {activeSection === "experience" ? (
+        <Section title={polishLabel("Опыт")} hideHeader>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
               label={polishLabel("Подпись")}
@@ -785,8 +908,10 @@ function AdminPage() {
             newItem={() => ({ y: "2025", t: "", d: "" })}
           />
         </Section>
+        ) : null}
 
-        <Section title={polishLabel("Контакты")}>
+        {activeSection === "contact" ? (
+        <Section title={polishLabel("Контакты")} hideHeader>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field
               label={polishLabel("Подпись")}
@@ -855,17 +980,7 @@ function AdminPage() {
             />
           </Subsection>
         </Section>
-
-        <div className="flex justify-end pb-16">
-          <Button
-            type="button"
-            onClick={save}
-            disabled={saving}
-            className="h-11 rounded-full bg-ember px-8 text-primary-foreground shadow-glow hover:bg-ember/90"
-          >
-            {saving ? polishLabel("Сохранение…") : polishLabel("Сохранить все изменения")}
-          </Button>
-        </div>
+        ) : null}
       </main>
     </div>
   );
@@ -874,6 +989,7 @@ function AdminPage() {
 function ArrayEditor<T>({
   items,
   onChange,
+  onRemoveItem,
   render,
   newItem,
   itemLabel = polishLabel("Элемент"),
@@ -881,18 +997,22 @@ function ArrayEditor<T>({
 }: {
   items: T[];
   onChange: (v: T[]) => void;
+  onRemoveItem?: (item: T) => void;
   render: (item: T, set: (v: T) => void) => React.ReactNode;
   newItem: () => T;
   itemLabel?: string;
   addLabel?: string;
 }) {
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 space-y-3">
       {items.map((item, i) => (
         <ItemCard
           key={i}
           title={`${itemLabel} ${i + 1}`}
-          onRemove={() => onChange(items.filter((_, j) => j !== i))}
+          onRemove={() => {
+            onRemoveItem?.(items[i]!);
+            onChange(items.filter((_, j) => j !== i));
+          }}
         >
           {render(item, (v) => {
             const copy = [...items];
@@ -916,9 +1036,11 @@ function ArrayEditor<T>({
 function VideoFileEditor({
   video,
   onChange,
+  scheduleMediaDelete,
 }: {
   video: PortfolioVideo;
   onChange: (url: string) => void;
+  scheduleMediaDelete: (url: string) => void;
 }) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -951,14 +1073,10 @@ function VideoFileEditor({
         kind: "video",
         folder: "portfolio/videos",
       });
-      onChange(result.url);
       if (previousUrl && previousUrl !== result.url) {
-        try {
-          await deleteSiteMedia(previousUrl);
-        } catch {
-          /* old blob may stay orphaned — new file is already linked */
-        }
+        scheduleMediaDelete(previousUrl);
       }
+      onChange(result.url);
       const sizeMb = (result.size / (1024 * 1024)).toFixed(1);
       const base = result.remuxed
         ? `Видео оптимизировано для мгновенного старта и загружено (${sizeMb} МБ).`
@@ -985,9 +1103,9 @@ function VideoFileEditor({
       </p>
 
       {hasFile ? (
-        <div className="space-y-3">
+        <div className="min-w-0 space-y-3">
           <FileMeta name={fileNameFromUrl(video.url)} url={video.url} />
-          <div className="overflow-hidden rounded-lg border border-border/70 bg-black">
+          <div className="min-w-0 overflow-hidden rounded-lg border border-border/70 bg-black">
             <FileVideoPlayer
               key={video.url}
               src={video.url}
@@ -1032,23 +1150,13 @@ function VideoFileEditor({
             variant="ghost"
             size="sm"
             disabled={uploading}
-            onClick={async () => {
+            onClick={() => {
               const previousUrl = video.url.trim();
               setError(null);
-              setInfo(null);
-              onChange("");
               clearTimeline();
-              if (previousUrl) {
-                try {
-                  await deleteSiteMedia(previousUrl);
-                  setInfo("Видео удалено из хранилища. Нажмите «Сохранить».");
-                } catch (err: unknown) {
-                  setInfo("Ссылка убрана. Нажмите «Сохранить».");
-                  setError(errorMessage(err, "Файл в хранилище не удалось удалить"));
-                }
-              } else {
-                setInfo("Видео убрано. Нажмите «Сохранить».");
-              }
+              if (previousUrl) scheduleMediaDelete(previousUrl);
+              onChange("");
+              setInfo("Видео убрано. Нажмите «Сохранить» — файл удалится из хранилища.");
             }}
             className="text-muted-foreground hover:text-red-400"
           >
@@ -1067,9 +1175,11 @@ function VideoFileEditor({
 function AboutPortraitEditor({
   imageUrl,
   onChange,
+  scheduleMediaDelete,
 }: {
   imageUrl: string;
   onChange: (url: string) => void;
+  scheduleMediaDelete: (url: string) => void;
 }) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -1107,18 +1217,28 @@ function AboutPortraitEditor({
         return;
       }
 
-      const ratio = width / height;
-      const target = 4 / 5;
-      const ratioOk = Math.abs(ratio - target) <= 0.08;
-      if (!ratioOk) {
-        setInfo(
-          `Размер ${width}×${height}. Соотношение не 4:5 — на сайте фото обрежется (object-cover). Лучше кадрировать заранее.`,
-        );
-      } else {
-        setInfo(`Загружено ${width}×${height}. Не забудьте нажать «Сохранить».`);
-      }
+      const prepared = await optimizeImageFile(file, {
+        aspect: "portrait",
+        maxWidth: 1024,
+        maxHeight: 1280,
+        quality: 0.84,
+        preferWebp: true,
+        fileName: file.name,
+      });
 
-      const publicUrl = (await runUpload(file, { kind: "image", folder: "about" })).url;
+      setInfo(
+        prepared.optimized
+          ? `Готово ${prepared.width}×${prepared.height} (из ${prepared.sourceWidth}×${prepared.sourceHeight}, кадр 4:5). Не забудьте нажать «Сохранить».`
+          : `Загружено ${prepared.width}×${prepared.height}. Не забудьте нажать «Сохранить».`,
+      );
+
+      const previousUrl = imageUrl.trim();
+      const publicUrl = (
+        await runUpload(prepared.file, { kind: "image", folder: "portfolio/about" })
+      ).url;
+      if (previousUrl && !isDefaultPortrait(previousUrl) && previousUrl !== publicUrl) {
+        scheduleMediaDelete(previousUrl);
+      }
       onChange(publicUrl);
     } catch (err: unknown) {
       setError(errorMessage(err, "Ошибка загрузки"));
@@ -1127,16 +1247,16 @@ function AboutPortraitEditor({
 
   return (
     <MediaPanel title={polishLabel("Фото в блоке «Обо мне»")}>
-      <div className="grid gap-5 sm:grid-cols-[132px_1fr]">
-        <div className="relative mx-auto aspect-[4/5] w-[132px] overflow-hidden rounded-xl border border-border bg-muted/20 sm:mx-0">
+      <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-start">
+        <div className="relative mx-auto aspect-[4/5] w-[132px] shrink-0 overflow-hidden rounded-xl border border-border bg-muted/20 sm:mx-0">
           <img
-            src={displaySrc}
+            src={proxiedMediaUrl(displaySrc)}
             alt={polishLabel("Превью портрета")}
             className="h-full w-full object-cover object-[center_28%]"
           />
         </div>
 
-        <div className="space-y-3 text-sm text-muted-foreground">
+        <div className="min-w-0 flex-1 space-y-3 text-sm text-muted-foreground">
           <p className="text-foreground">
             {isCustom
               ? polishLabel("Сейчас на сайте — загруженное фото.")
@@ -1150,7 +1270,7 @@ function AboutPortraitEditor({
               <span className="text-foreground">4:5</span>, от {ABOUT_IMAGE_MIN_WIDTH} px
             </li>
             <li>
-              <span className="text-foreground">Рекомендуемо:</span> 1024×1536
+              <span className="text-foreground">Авто:</span> кадр 4:5 → WebP
             </li>
             <li>
               <span className="text-foreground">До 5 МБ</span>
@@ -1191,6 +1311,7 @@ function AboutPortraitEditor({
                 size="sm"
                 disabled={uploading}
                 onClick={() => {
+                  scheduleMediaDelete(imageUrl);
                   onChange("");
                   clearTimeline();
                   setError(null);
@@ -1215,9 +1336,11 @@ function AboutPortraitEditor({
 function VideoCoverEditor({
   video,
   onChange,
+  scheduleMediaDelete,
 }: {
   video: PortfolioVideo;
   onChange: (coverUrl: string) => void;
+  scheduleMediaDelete: (url: string) => void;
 }) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -1275,9 +1398,13 @@ function VideoCoverEditor({
           : `Загружено ${prepared.width}×${prepared.height}. Не забудьте нажать «Сохранить».`,
       );
 
+      const previousUrl = video.coverUrl.trim();
       const publicUrl = (
-        await runUpload(prepared.file, { kind: "image", folder: "portfolio" })
+        await runUpload(prepared.file, { kind: "image", folder: "portfolio/covers" })
       ).url;
+      if (previousUrl && previousUrl !== publicUrl) {
+        scheduleMediaDelete(previousUrl);
+      }
       onChange(publicUrl);
     } catch (err: unknown) {
       setError(errorMessage(err, "Ошибка загрузки"));
@@ -1286,8 +1413,8 @@ function VideoCoverEditor({
 
   return (
     <MediaPanel title={polishLabel("Обложка в карусели")}>
-      <div className="grid gap-4 sm:grid-cols-[168px_1fr]">
-        <div className="relative mx-auto aspect-video w-full max-w-[168px] overflow-hidden rounded-lg border border-border bg-muted/20 sm:mx-0">
+      <div className="flex min-w-0 flex-col gap-4">
+        <div className="relative aspect-video w-full max-w-[220px] overflow-hidden rounded-lg border border-border bg-muted/20">
           <img
             src={proxiedMediaUrl(displaySrc)}
             alt={polishLabel("Превью обложки")}
@@ -1295,7 +1422,7 @@ function VideoCoverEditor({
           />
         </div>
 
-        <div className="space-y-3 text-sm text-muted-foreground">
+        <div className="min-w-0 space-y-3 text-sm text-muted-foreground">
           <p className="text-foreground">
             {polishLabel("Сейчас:")} {sourceLabel}.
           </p>
@@ -1339,6 +1466,7 @@ function VideoCoverEditor({
                 size="sm"
                 disabled={uploading}
                 onClick={() => {
+                  scheduleMediaDelete(video.coverUrl);
                   onChange("");
                   clearTimeline();
                   setError(null);

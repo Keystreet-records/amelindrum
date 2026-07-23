@@ -1,8 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 const BLOB_HOST_SUFFIX = ".public.blob.vercel-storage.com";
-const R2_DEV_HOST_SUFFIX = ".r2.dev";
-/** Contiguous CDN GETs often stall; small Range parts complete reliably. */
+/** Contiguous Blob GETs often stall; small Range parts complete reliably. */
 const CHUNK_SIZE = 8 * 1024;
 const CHUNK_RETRIES = 4;
 /** Cap what we serve per request so serverless stays fast (browser asks for more). */
@@ -13,30 +12,11 @@ function isImageContentType(contentType: string | null): boolean {
   return Boolean(contentType?.toLowerCase().startsWith("image/"));
 }
 
-function configuredR2Hostname(): string | null {
-  const base = (process.env.R2_PUBLIC_BASE_URL ?? "").trim();
-  if (!base) return null;
-  try {
-    return new URL(base).hostname;
-  } catch {
-    return null;
-  }
-}
-
-/** Allowlisted public media hosts we re-stream in 8KB upstream Ranges. */
+/** Legacy Vercel Blob only — R2 must play/load directly (proxying is too slow). */
 function isManagedMediaUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
-    if (parsed.protocol !== "https:") return false;
-    if (parsed.hostname.endsWith(BLOB_HOST_SUFFIX)) return true;
-    if (parsed.hostname.endsWith(R2_DEV_HOST_SUFFIX) && parsed.pathname.includes("/portfolio/")) {
-      return true;
-    }
-    const r2Host = configuredR2Hostname();
-    if (r2Host && parsed.hostname === r2Host && parsed.pathname.includes("/portfolio/")) {
-      return true;
-    }
-    return false;
+    return parsed.protocol === "https:" && parsed.hostname.endsWith(BLOB_HOST_SUFFIX);
   } catch {
     return false;
   }

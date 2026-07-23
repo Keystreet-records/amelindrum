@@ -60,13 +60,17 @@ export const Route = createFileRoute("/api/upload")({
         }
 
         const maxBytes = kind === "video" ? VIDEO_MAX_BYTES : 5 * 1024 * 1024;
-        if (size > maxBytes) {
+        if (!(size > 0) || size > maxBytes) {
           return Response.json(
             {
               error:
                 kind === "video"
-                  ? `Файл больше лимита ${Math.floor(VIDEO_MAX_BYTES / (1024 * 1024))} МБ.`
-                  : "Изображение больше 5 МБ.",
+                  ? size > maxBytes
+                    ? `Файл больше лимита ${Math.floor(VIDEO_MAX_BYTES / (1024 * 1024))} МБ.`
+                    : "Нужен размер файла (size)."
+                  : size > maxBytes
+                    ? "Изображение больше 5 МБ."
+                    : "Нужен размер файла (size).",
             },
             { status: 400 },
           );

@@ -64,14 +64,21 @@ export function publicUrlForKey(config: R2Config, key: string): string {
 export function objectKeyFromPublicUrl(config: R2Config, url: string): string | null {
   try {
     const parsed = new URL(url);
+    if (parsed.protocol !== "https:") return null;
+
+    let path = parsed.pathname.replace(/^\/+/, "");
     const base = new URL(config.publicBaseUrl);
-    if (parsed.protocol !== "https:" || parsed.hostname !== base.hostname) return null;
-    const basePath = base.pathname.replace(/\/+$/, "");
-    let path = parsed.pathname;
-    if (basePath && path.startsWith(basePath)) {
-      path = path.slice(basePath.length);
+    if (parsed.hostname === base.hostname) {
+      const basePath = base.pathname.replace(/\/+$/, "").replace(/^\/+/, "");
+      if (basePath && path.startsWith(`${basePath}/`)) {
+        path = path.slice(basePath.length + 1);
+      } else if (basePath && path === basePath) {
+        path = "";
+      }
+    } else if (!parsed.hostname.endsWith(".r2.dev")) {
+      return null;
     }
-    path = path.replace(/^\/+/, "");
+
     if (!path.startsWith("portfolio/")) return null;
     return path;
   } catch {

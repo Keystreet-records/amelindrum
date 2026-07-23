@@ -114,7 +114,7 @@ export function UploadTimelineLoader({
   return (
     <div
       className={cn(
-        "rounded-lg border border-border/60 bg-background/50 p-3",
+        "w-full min-w-0 overflow-hidden rounded-lg border border-border/60 bg-background/50 p-3",
         className,
       )}
       role="status"

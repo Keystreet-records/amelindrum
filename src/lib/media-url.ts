@@ -22,7 +22,8 @@ export function isR2DevUrl(url: string): boolean {
 }
 
 /**
- * Custom R2 domain from VITE_R2_PUBLIC_BASE_URL (optional client mirror of R2_PUBLIC_BASE_URL).
+ * Custom R2 domain from optional VITE_R2_PUBLIC_BASE_URL (client mirror of R2_PUBLIC_BASE_URL).
+ * Not required for playback — R2 URLs load directly. Used only for client-side host checks.
  */
 export function isConfiguredR2PublicUrl(url: string): boolean {
   const base = (import.meta.env.VITE_R2_PUBLIC_BASE_URL as string | undefined)?.trim();

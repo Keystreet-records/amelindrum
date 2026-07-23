@@ -228,20 +228,27 @@ export function Section({
   title,
   description,
   children,
+  hideHeader = false,
 }: {
   title: string;
   description?: string;
   children: React.ReactNode;
+  /** When section title already lives in admin tabs. */
+  hideHeader?: boolean;
 }) {
   return (
-    <section className="rounded-2xl border border-border/80 bg-card/35 p-5 sm:p-6">
-      <div className="mb-5 border-b border-border/60 pb-4">
-        <h2 className="font-display text-2xl tracking-tight">{title}</h2>
-        {description ? (
-          <p className="mt-1.5 text-sm text-muted-foreground">{description}</p>
-        ) : null}
-      </div>
-      <div className="space-y-5">{children}</div>
+    <section className="min-w-0 overflow-hidden rounded-2xl border border-border/80 bg-card/35 p-5 sm:p-6">
+      {!hideHeader ? (
+        <div className="mb-5 border-b border-border/60 pb-4">
+          <h2 className="font-display text-2xl tracking-tight">{title}</h2>
+          {description ? (
+            <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{description}</p>
+          ) : null}
+        </div>
+      ) : description ? (
+        <p className="mb-5 text-sm leading-relaxed text-muted-foreground">{description}</p>
+      ) : null}
+      <div className="min-w-0 space-y-5">{children}</div>
     </section>
   );
 }
@@ -271,16 +278,16 @@ export function ItemCard({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-border/70 bg-background/55 p-4 sm:p-5">
+    <div className="min-w-0 overflow-hidden rounded-xl border border-border/70 bg-background/55 p-4 sm:p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <p className="text-sm font-medium text-foreground">{title}</p>
+        <p className="min-w-0 truncate text-sm font-medium text-foreground">{title}</p>
         {onRemove ? (
           <Button
             type="button"
             variant="ghost"
             size="sm"
             onClick={onRemove}
-            className="h-8 gap-1.5 px-2 text-muted-foreground hover:bg-destructive/10 hover:text-red-400"
+            className="h-8 shrink-0 gap-1.5 px-2 text-muted-foreground hover:bg-destructive/10 hover:text-red-400"
             aria-label={polishLabel("Удалить")}
           >
             <X className="size-3.5" />
@@ -288,7 +295,7 @@ export function ItemCard({
           </Button>
         ) : null}
       </div>
-      <div className="space-y-4">{children}</div>
+      <div className="min-w-0 space-y-4">{children}</div>
     </div>
   );
 }
@@ -305,12 +312,12 @@ export function MediaPanel({
   return (
     <div
       className={cn(
-        "space-y-3 rounded-xl border border-dashed border-border/80 bg-card/40 p-4",
+        "min-w-0 space-y-3 overflow-hidden rounded-xl border border-dashed border-border/80 bg-card/40 p-4",
         className,
       )}
     >
       <p className="text-sm font-medium text-foreground">{title}</p>
-      {children}
+      <div className="min-w-0">{children}</div>
     </div>
   );
 }
@@ -325,7 +332,7 @@ export function StatusMessage({
   return (
     <p
       className={cn(
-        "rounded-lg px-3 py-2 text-sm leading-relaxed",
+        "break-words rounded-lg px-3 py-2 text-sm leading-relaxed",
         tone === "success" && "bg-primary/10 text-primary",
         tone === "error" && "bg-red-500/10 text-red-400",
         tone === "info" && "bg-muted/40 text-muted-foreground",

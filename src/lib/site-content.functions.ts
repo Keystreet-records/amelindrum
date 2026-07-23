@@ -4,12 +4,20 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { Database } from "@/integrations/supabase/types";
 import { safeUrlSchema } from "@/lib/safe-url";
-import { DEFAULT_CONTENT, normalizeSiteContent, type SiteContent } from "@/lib/site-content";
+import {
+  DEFAULT_CONTENT,
+  normalizeSiteContent,
+  normalizeSocialUrl,
+  type SiteContent,
+} from "@/lib/site-content";
 
 const text = z.string();
-const url = z.string().superRefine((value, ctx) => {
+
+const optionalHttpUrl = z.string().superRefine((value, ctx) => {
+  const trimmed = value.trim();
+  if (!trimmed) return;
   try {
-    safeUrlSchema(value);
+    safeUrlSchema(trimmed);
   } catch (error) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -17,6 +25,27 @@ const url = z.string().superRefine((value, ctx) => {
     });
   }
 });
+
+const socialSchema = z
+  .object({
+    label: text,
+    url: z.string(),
+  })
+  .transform((social) => ({
+    label: social.label.trim(),
+    url: normalizeSocialUrl(social.label, social.url),
+  }))
+  .superRefine((social, ctx) => {
+    if (!social.url) return;
+    try {
+      safeUrlSchema(social.url);
+    } catch (error) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: error instanceof Error ? error.message : "Недопустимая ссылка",
+      });
+    }
+  });
 
 const siteContentSchema = z.object({
   hero: z.object({
@@ -30,17 +59,7 @@ const siteContentSchema = z.object({
   about: z.object({
     eyebrow: text,
     heading: text,
-    imageUrl: z.string().superRefine((value, ctx) => {
-      if (!value.trim()) return;
-      try {
-        safeUrlSchema(value);
-      } catch (error) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: error instanceof Error ? error.message : "Недопустимая ссылка на фото",
-        });
-      }
-    }),
+    imageUrl: optionalHttpUrl,
     paragraphs: z.array(text),
     stats: z.array(z.object({ n: text, l: text })),
   }),
@@ -58,30 +77,8 @@ const siteContentSchema = z.object({
         desc: text,
         tags: z.array(text),
         source: z.enum(["youtube", "vk", "file"]),
-        url: z.string().superRefine((value, ctx) => {
-          const trimmed = value.trim();
-          if (!trimmed) return;
-          // File uploads must be https Blob/CDN URLs; youtube/vk validated loosely as http(s).
-          try {
-            safeUrlSchema(trimmed);
-          } catch (error) {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              message: error instanceof Error ? error.message : "Недопустимая ссылка на видео",
-            });
-          }
-        }),
-        coverUrl: z.string().superRefine((value, ctx) => {
-          if (!value.trim()) return;
-          try {
-            safeUrlSchema(value);
-          } catch (error) {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              message: error instanceof Error ? error.message : "Недопустимая ссылка на обложку",
-            });
-          }
-        }),
+        url: optionalHttpUrl,
+        coverUrl: optionalHttpUrl,
       }),
     ),
   }),
@@ -96,7 +93,7 @@ const siteContentSchema = z.object({
     description: text,
     email: text,
     phone: text,
-    socials: z.array(z.object({ label: text, url })),
+    socials: z.array(socialSchema),
   }),
 });
 
@@ -115,20 +112,20 @@ function createPublicSupabaseClient() {
 }
 
 export const getPublicSiteContent = createServerFn({ method: "GET" }).handler(async () => {
-  try {
-    const supabase = createPublicSupabaseClient();
-    const { data, error } = await supabase
-      .from("site_content")
-      .select("data")
-      .eq("id", 1)
-      .maybeSingle();
+  const supabase = createPublicSupabaseClient();
+  const { data, error } = await supabase
+    .from("site_content")
+    .select("data")
+    .eq("id", 1)
+    .maybeSingle();
 
-    if (error) throw error;
-    return normalizeSiteContent(data?.data ?? DEFAULT_CONTENT);
-  } catch (error) {
-    console.error("[site-content] public fetch failed, using defaults:", error);
-    return normalizeSiteContent(DEFAULT_CONTENT);
+  if (error) {
+    console.error("[site-content] public fetch failed:", error);
+    throw error;
   }
+
+  // Empty row (fresh project) → defaults. Env/network/RLS errors throw above.
+  return normalizeSiteContent(data?.data ?? DEFAULT_CONTENT);
 });
 
 export const getAdminSiteContent = createServerFn({ method: "GET" })
