@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { FileVideoPlayer } from "@/components/portfolio/file-video-player";
 import { animateVideoModal } from "@/hooks/use-landing-motion";
 import {
   getPortfolioVideoEmbed,
@@ -12,16 +13,11 @@ type PortfolioVideoModalProps = {
   onClose: () => void;
 };
 
-type FilePlayerState = "loading" | "ready" | "error";
-
 export function PortfolioVideoModal({ video, onClose }: PortfolioVideoModalProps) {
   const [closing, setClosing] = useState(false);
   const [playerReady, setPlayerReady] = useState(false);
-  const [fileState, setFileState] = useState<FilePlayerState>("loading");
-  const [fileError, setFileError] = useState<string | null>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
 
   const embed = video && video.source !== "file" ? getPortfolioVideoEmbed(video) : null;
   const fileUrl = video?.source === "file" ? video.url.trim() : "";
@@ -39,8 +35,6 @@ export function PortfolioVideoModal({ video, onClose }: PortfolioVideoModalProps
   useEffect(() => {
     if (!video) {
       setPlayerReady(false);
-      setFileState("loading");
-      setFileError(null);
       return;
     }
     const onKeyDown = (event: KeyboardEvent) => {
@@ -57,113 +51,12 @@ export function PortfolioVideoModal({ video, onClose }: PortfolioVideoModalProps
   useEffect(() => {
     if (!video || !overlayRef.current || !panelRef.current) return;
     animateVideoModal(overlayRef.current, panelRef.current, "in");
-    setFileState("loading");
-    setFileError(null);
     const id = window.requestAnimationFrame(() => setPlayerReady(true));
     return () => {
       window.cancelAnimationFrame(id);
       setPlayerReady(false);
     };
   }, [video]);
-
-  useEffect(() => {
-    if (!fileUrl || !playerReady) return;
-
-    let cancelled = false;
-    let failTimer = 0;
-    let raf = 0;
-    let tries = 0;
-    let detach: (() => void) | undefined;
-
-    const markReady = (el: HTMLVideoElement) => {
-      if (cancelled) return;
-      setFileState("ready");
-      setFileError(null);
-      window.clearTimeout(failTimer);
-      const play = el.play();
-      if (play && typeof play.catch === "function") {
-        play.catch(() => {
-          /* user can press play manually */
-        });
-      }
-    };
-
-    const markError = (message: string) => {
-      if (cancelled) return;
-      window.clearTimeout(failTimer);
-      setFileState("error");
-      setFileError(message);
-    };
-
-    const bind = () => {
-      if (cancelled) return;
-      const el = videoRef.current;
-      if (!el) {
-        tries += 1;
-        if (tries < 45) {
-          raf = window.requestAnimationFrame(bind);
-        } else {
-          markError(polishLabel("Плеер не инициализировался. Обновите страницу."));
-        }
-        return;
-      }
-
-      el.src = fileUrl;
-
-      failTimer = window.setTimeout(() => {
-        if (cancelled) return;
-        if (el.readyState >= HTMLMediaElement.HAVE_METADATA) {
-          markReady(el);
-          return;
-        }
-        markError(
-          polishLabel(
-            "Видео слишком долго грузится. Проверьте интернет или перезалейте MP4 (H.264) до 200 МБ.",
-          ),
-        );
-      }, 12000);
-
-      const onMeta = () => markReady(el);
-      const onCanPlay = () => markReady(el);
-      const onError = () =>
-        markError(
-          polishLabel(
-            "Браузер не смог проиграть файл. Нужен MP4 (H.264 + AAC). Перезалейте через админку.",
-          ),
-        );
-
-      el.addEventListener("loadedmetadata", onMeta);
-      el.addEventListener("loadeddata", onCanPlay);
-      el.addEventListener("canplay", onCanPlay);
-      el.addEventListener("error", onError);
-
-      detach = () => {
-        el.removeEventListener("loadedmetadata", onMeta);
-        el.removeEventListener("loadeddata", onCanPlay);
-        el.removeEventListener("canplay", onCanPlay);
-        el.removeEventListener("error", onError);
-      };
-
-      try {
-        el.load();
-      } catch {
-        /* ignore */
-      }
-
-      if (el.readyState >= HTMLMediaElement.HAVE_METADATA) {
-        markReady(el);
-      }
-    };
-
-    bind();
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(failTimer);
-      window.cancelAnimationFrame(raf);
-      detach?.();
-    };
-  }, [fileUrl, playerReady]);
 
   if (!video) return null;
 
@@ -199,61 +92,12 @@ export function PortfolioVideoModal({ video, onClose }: PortfolioVideoModalProps
         </button>
         <div className="relative aspect-video bg-black">
           {fileUrl && playerReady ? (
-            <>
-              <video
-                ref={videoRef}
-                key={fileUrl}
-                src={fileUrl}
-                controls
-                playsInline
-                preload="metadata"
-                className="h-full w-full"
-              />
-              {fileState === "loading" ? (
-                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/40 px-6 text-center">
-                  <div className="size-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                  <p className="text-sm text-foreground/90">
-                    {polishLabel("Загрузка видео…")}
-                  </p>
-                  <p className="max-w-sm text-xs text-muted-foreground">
-                    {polishLabel("Большой файл может открываться несколько секунд.")}
-                  </p>
-                </div>
-              ) : null}
-              {fileState === "error" ? (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/85 px-6 text-center">
-                  <p className="text-lg font-medium text-foreground">{video.title}</p>
-                  <p className="max-w-md text-sm text-muted-foreground">
-                    {fileError ?? polishLabel("Не удалось проиграть видео.")}
-                  </p>
-                  <div className="flex flex-wrap items-center justify-center gap-3">
-                    <button
-                      type="button"
-                      className="rounded-full bg-ember px-4 py-2 text-sm font-medium text-primary-foreground"
-                      onClick={() => {
-                        setFileState("loading");
-                        setFileError(null);
-                        const el = videoRef.current;
-                        if (el) {
-                          el.src = fileUrl;
-                          el.load();
-                        }
-                      }}
-                    >
-                      {polishLabel("Повторить")}
-                    </button>
-                    <a
-                      href={fileUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm font-medium text-primary underline-offset-4 hover:underline"
-                    >
-                      {polishLabel("Открыть файл напрямую")}
-                    </a>
-                  </div>
-                </div>
-              ) : null}
-            </>
+            <FileVideoPlayer
+              src={fileUrl}
+              title={video.title}
+              className="absolute inset-0 h-full w-full"
+              autoPlay
+            />
           ) : embed && playerReady ? (
             <iframe
               src={embed}

@@ -42,7 +42,7 @@ export const Route = createFileRoute("/api/upload")({
               }
 
               const allowedContentTypes = kind === "video" ? [...VIDEO_TYPES] : [...IMAGE_TYPES];
-              const maximumSizeInBytes = kind === "video" ? 200 * 1024 * 1024 : 5 * 1024 * 1024;
+              const maximumSizeInBytes = kind === "video" ? 100 * 1024 * 1024 : 5 * 1024 * 1024;
 
               return {
                 allowedContentTypes,

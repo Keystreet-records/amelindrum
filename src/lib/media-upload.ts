@@ -1,6 +1,6 @@
 import { upload } from "@vercel/blob/client";
 import { supabase } from "@/integrations/supabase/client";
-import { prepareVideoForUpload } from "@/lib/mp4-faststart";
+import { prepareVideoForUpload, VIDEO_MAX_BYTES, VIDEO_MAX_MB } from "@/lib/mp4-faststart";
 
 export type MediaKind = "image" | "video";
 
@@ -16,7 +16,9 @@ async function getAccessToken(): Promise<string> {
 
 function extensionFor(file: File, kind: MediaKind): string {
   const fromName = file.name.split(".").pop()?.toLowerCase();
-  if (kind === "video" && file.type === "video/mp4") return "mp4";
+  if (kind === "video" && (file.type === "video/mp4" || file.name.toLowerCase().endsWith(".mp4"))) {
+    return "mp4";
+  }
   if (fromName && /^[a-z0-9]+$/.test(fromName)) {
     if (kind === "video" && VIDEO_EXT.has(fromName)) return fromName === "m4v" ? "mp4" : fromName;
     if (kind === "image") return fromName;
@@ -61,16 +63,16 @@ export function formatMediaUploadError(err: unknown, fallback = "Ошибка з
     return "Не удалось авторизовать загрузку. Обновите страницу и войдите в админку снова.";
   }
   if (/memory|array buffer|allocation|out of memory/i.test(message)) {
-    return "Не хватило памяти в браузере. Закройте лишние вкладки и попробуйте снова (до 200 МБ).";
+    return `Не хватило памяти в браузере. Закройте лишние вкладки и загрузите файл до ${VIDEO_MAX_MB} МБ.`;
   }
   if (/network|failed to fetch|timeout|aborted/i.test(message)) {
-    return "Сеть оборвалась во время загрузки. Проверьте интернет и повторите — для больших файлов это нормально, просто дождитесь конца.";
+    return "Сеть оборвалась во время загрузки. Проверьте интернет и повторите.";
   }
   if (/content.?type|not allowed|invalid.*type/i.test(message)) {
-    return "Формат файла не принят хранилищем. Нужен MP4, WebM или MOV.";
+    return "Формат файла не принят. Нужен MP4 (H.264), WebM или MOV.";
   }
   if (/maximumSize|too large|entity too large|413/i.test(message)) {
-    return "Файл больше лимита 200 МБ. Сожмите видео и попробуйте снова.";
+    return `Файл больше лимита ${VIDEO_MAX_MB} МБ. Сожмите видео и попробуйте снова.`;
   }
   return message || fallback;
 }
@@ -87,13 +89,12 @@ export type MediaUploadResult = {
   remuxed: boolean;
   contentType: string;
   size: number;
-  warning?: string;
+  streamingReady: boolean;
 };
 
 /**
- * Upload media via Vercel Blob (client → Blob CDN).
- * Videos are remuxed to MP4 faststart when needed (memory-safe up to 200MB).
- * Remux failure never blocks the upload.
+ * Upload media via Vercel Blob.
+ * Videos are optimized for progressive streaming (faststart) before upload.
  */
 export async function uploadSiteMedia(
   file: File,
@@ -103,19 +104,29 @@ export async function uploadSiteMedia(
     onProgress?: (progress: MediaUploadProgress) => void;
   },
 ): Promise<MediaUploadResult> {
+  if (options.kind === "video" && file.size > VIDEO_MAX_BYTES) {
+    throw new Error(
+      `Файл больше ${VIDEO_MAX_MB} МБ. Сожмите видео (HandBrake / экспорт H.264) и загрузите снова.`,
+    );
+  }
+
   options.onProgress?.({ phase: "preparing", loaded: 0, total: file.size || 1, percentage: 0 });
 
   const token = await getAccessToken();
 
   let uploadFile = file;
   let remuxed = false;
-  let warning: string | undefined;
+  let streamingReady = options.kind !== "video";
 
   if (options.kind === "video") {
-    const prepared = await prepareVideoForUpload(file);
-    uploadFile = prepared.file;
-    remuxed = prepared.remuxed;
-    warning = prepared.warning;
+    try {
+      const prepared = await prepareVideoForUpload(file);
+      uploadFile = prepared.file;
+      remuxed = prepared.remuxed;
+      streamingReady = prepared.streamingReady;
+    } catch (err) {
+      throw new Error(formatMediaUploadError(err, "Не удалось подготовить видео"));
+    }
   }
 
   const total = uploadFile.size || 1;
@@ -128,7 +139,6 @@ export async function uploadSiteMedia(
     const blob = await upload(pathname, uploadFile, {
       access: "public",
       handleUploadUrl: "/api/upload",
-      // Always multipart for video — required reliability for large files
       multipart: options.kind === "video" || uploadFile.size > 4 * 1024 * 1024,
       contentType,
       clientPayload: JSON.stringify({ kind: options.kind }),
@@ -155,9 +165,11 @@ export async function uploadSiteMedia(
       remuxed,
       contentType,
       size: uploadFile.size,
-      warning,
+      streamingReady,
     };
   } catch (err) {
     throw new Error(formatMediaUploadError(err));
   }
 }
+
+export { VIDEO_MAX_BYTES, VIDEO_MAX_MB };

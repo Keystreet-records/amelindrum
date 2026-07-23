@@ -29,14 +29,15 @@ import {
   UploadTimelineLoader,
   type UploadTimelineState,
 } from "@/components/admin/upload-timeline-loader";
+import { FileVideoPlayer } from "@/components/portfolio/file-video-player";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { uploadSiteMedia, type MediaKind } from "@/lib/media-upload";
+import { uploadSiteMedia, type MediaKind, VIDEO_MAX_BYTES, VIDEO_MAX_MB } from "@/lib/media-upload";
 import { polishLabel } from "@/lib/typography";
 
 const DEFAULT_PORTRAIT = "/media/portrait.jpg";
 const FALLBACK_COVER = "/media/video-thumb-1.jpg";
-const VIDEO_FILE_MAX_BYTES = 200 * 1024 * 1024;
+const VIDEO_FILE_MAX_BYTES = VIDEO_MAX_BYTES;
 const VIDEO_FILE_TYPES = new Set([
   "video/mp4",
   "video/webm",
@@ -61,7 +62,7 @@ function useUploadTimeline() {
   async function runUpload(
     file: File,
     options: { kind: MediaKind; folder: string },
-  ): Promise<{ url: string; remuxed: boolean; size: number; warning?: string }> {
+  ): Promise<{ url: string; remuxed: boolean; size: number; streamingReady: boolean }> {
     setTimeline({
       fileName: file.name,
       fileSize: file.size,
@@ -99,7 +100,7 @@ function useUploadTimeline() {
         url: result.url,
         remuxed: result.remuxed,
         size: result.size,
-        warning: result.warning,
+        streamingReady: result.streamingReady,
       };
     } catch (err: unknown) {
       const message = errorMessage(err, "Ошибка загрузки");
@@ -955,7 +956,7 @@ function VideoFileEditor({
       return;
     }
     if (file.size > VIDEO_FILE_MAX_BYTES) {
-      setError("Файл больше 200 МБ. Сожмите видео и попробуйте снова.");
+      setError(`Файл больше ${VIDEO_MAX_MB} МБ. Сожмите видео и попробуйте снова.`);
       return;
     }
 
@@ -967,10 +968,11 @@ function VideoFileEditor({
       onChange(result.url);
       const sizeMb = (result.size / (1024 * 1024)).toFixed(1);
       const base = result.remuxed
-        ? `Видео оптимизировано для веба и загружено (${sizeMb} МБ).`
-        : `Видео загружено (${sizeMb} МБ).`;
-      const warn = result.warning ? ` ${result.warning}` : "";
-      setInfo(`${base}${warn} Не забудьте нажать «Сохранить».`);
+        ? `Видео оптимизировано для мгновенного старта и загружено (${sizeMb} МБ).`
+        : result.streamingReady
+          ? `Видео готово к стримингу и загружено (${sizeMb} МБ).`
+          : `Видео загружено (${sizeMb} МБ).`;
+      setInfo(`${base} Не забудьте нажать «Сохранить».`);
     } catch (err: unknown) {
       setError(errorMessage(err, "Ошибка загрузки"));
     }
@@ -980,12 +982,14 @@ function VideoFileEditor({
     <MediaPanel title={polishLabel("Видеофайл")}>
       <p className="text-sm text-muted-foreground">
         {hasFile
-          ? polishLabel("Файл на сервере — на сайте откроется свой плеер.")
-          : polishLabel("MP4 (H.264 + AAC), WebM или MOV. Рекомендуем до 100 МБ, максимум 200 МБ.")}
+          ? polishLabel("Файл на сервере — на сайте откроется сразу и догрузится по ходу.")
+          : polishLabel(
+              `MP4 (H.264 + AAC), WebM или MOV. Лимит ${VIDEO_MAX_MB} МБ — как у удобного веб-плеера.`,
+            )}
       </p>
       <p className="text-xs text-muted-foreground">
         {polishLabel(
-          "Перед загрузкой файл автоматически готовится для веба (faststart), чтобы плеер не зависал на 0:00.",
+          "Перед загрузкой файл готовится для веба (faststart): старт сразу, остальное — по мере воспроизведения.",
         )}
       </p>
 
@@ -993,13 +997,12 @@ function VideoFileEditor({
         <div className="space-y-3">
           <FileMeta name={fileNameFromUrl(video.url)} url={video.url} />
           <div className="overflow-hidden rounded-lg border border-border/70 bg-black">
-            <video
+            <FileVideoPlayer
               key={video.url}
               src={video.url}
-              controls
-              playsInline
-              preload="metadata"
+              title={video.title}
               className="aspect-video max-h-56 w-full"
+              autoPlay={false}
             />
           </div>
         </div>
