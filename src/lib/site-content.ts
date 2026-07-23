@@ -46,7 +46,7 @@ export type PortfolioVideo = {
   title: string;
   desc: string;
   tags: string[];
-  /** youtube/vk = embed URL; file = uploaded video on Vercel Blob */
+  /** youtube/vk = embed URL; file = uploaded video on Cloudflare R2 */
   source: "youtube" | "vk" | "file";
   url: string;
   /** Custom carousel cover URL; empty = platform auto thumb or site fallback */
@@ -66,7 +66,8 @@ export const DEFAULT_CONTENT: SiteContent = {
   about: {
     eyebrow: "Обо мне",
     heading: "Ритм — это язык, которому можно научить",
-    imageUrl: "/media/portrait.jpg",
+    imageUrl:
+      "https://pub-f451e2de580d495e85d97dc9d8e4fb71.r2.dev/portfolio/about/1784816328559-542a8c04.jpg",
     paragraphs: [
       "Меня зовут Аркадий Амелин. Я работаю с артистами в студии и на сцене, записываю барабаны для авторских проектов и саундтреков, преподаю — от первых ударов до сценической свободы",
       "Окончил консерваторию по классу ударных инструментов. Играл в составах джазовых, рок- и поп-проектов, выступал на крупных российских и международных площадках, участвовал в студийных сессиях для лейблов и независимых артистов",

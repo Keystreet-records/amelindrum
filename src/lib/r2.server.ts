@@ -86,11 +86,13 @@ export function objectKeyFromPublicUrl(config: R2Config, url: string): string | 
   }
 }
 
+export const R2_OBJECT_CACHE_CONTROL = "public, max-age=31536000, immutable";
+
 export async function createPresignedPutUrl(options: {
   key: string;
   contentType: string;
   expiresInSeconds?: number;
-}): Promise<{ uploadUrl: string; publicUrl: string; key: string }> {
+}): Promise<{ uploadUrl: string; publicUrl: string; key: string; cacheControl: string }> {
   const config = getR2Config();
   if (!config) throw new Error(r2MissingEnvMessage());
 
@@ -100,6 +102,8 @@ export async function createPresignedPutUrl(options: {
     Bucket: config.bucket,
     Key: key,
     ContentType: options.contentType,
+    // Signed into the PUT — client must send the same Cache-Control header.
+    CacheControl: R2_OBJECT_CACHE_CONTROL,
   });
 
   const uploadUrl = await getSignedUrl(client, command, {
@@ -110,6 +114,7 @@ export async function createPresignedPutUrl(options: {
     uploadUrl,
     publicUrl: publicUrlForKey(config, key),
     key,
+    cacheControl: R2_OBJECT_CACHE_CONTROL,
   };
 }
 

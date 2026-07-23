@@ -1,5 +1,5 @@
 -- NOTE: storage.buckets 'site-media' is legacy.
--- Media uploads now use Vercel Blob (see src/routes/api/upload.ts).
+-- Media uploads now use Cloudflare R2 (see src/routes/api/upload.ts).
 -- This INSERT is harmless if left; new projects can skip this migration.
 
 -- Ensure public media bucket exists (idempotent with earlier site_media migration)

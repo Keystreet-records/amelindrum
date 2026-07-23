@@ -8,12 +8,13 @@ import { useSiteContent } from "@/hooks/use-site-content";
 import { useLandingMotion } from "@/hooks/use-landing-motion";
 import { siteContentQueryOptions } from "@/lib/site-content.query";
 import { scrollToHash } from "@/lib/scroll-to-hash";
-import { proxiedMediaUrl } from "@/lib/media-url";
 import { getPublicSiteUrl } from "@/lib/site-url";
 import type { SiteContent } from "@/lib/site-content";
+import { ReliableImage } from "@/components/media/reliable-image";
 
 const HERO_IMG = "/media/hero-cover.jpg";
-const PORTRAIT_IMG = "/media/portrait.jpg";
+const PORTRAIT_IMG =
+  "https://pub-f451e2de580d495e85d97dc9d8e4fb71.r2.dev/portfolio/about/1784816328559-542a8c04.jpg";
 const THUMBS = ["/media/video-thumb-1.jpg", "/media/video-thumb-2.jpg", "/media/video-thumb-3.jpg"];
 
 function getOgImageUrl() {
@@ -179,7 +180,7 @@ function Marquee({ items }: { items: string[] }) {
 }
 
 function About({ c }: { c: SiteContent }) {
-  const portraitSrc = proxiedMediaUrl(c.about.imageUrl.trim() || PORTRAIT_IMG);
+  const portraitSrc = c.about.imageUrl.trim() || PORTRAIT_IMG;
 
   return (
     <section id="about" className="section-tight-top relative section-to-band">
@@ -189,11 +190,11 @@ function About({ c }: { c: SiteContent }) {
             data-reveal="portrait"
             className="absolute inset-0 overflow-hidden rounded-2xl border border-border/50 shadow-card"
           >
-            <img
+            <ReliableImage
               src={portraitSrc}
+              fallbackSrc={PORTRAIT_IMG}
               alt="Аркадий Амелин с барабанными палочками"
-              loading="lazy"
-              decoding="async"
+              loading="eager"
               width={1024}
               height={1536}
               className="h-full w-full object-cover object-[center_28%] scale-[1.04]"

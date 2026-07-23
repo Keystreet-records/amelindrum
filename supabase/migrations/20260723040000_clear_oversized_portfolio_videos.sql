@@ -1,4 +1,4 @@
--- Clear portfolio file URLs that pointed at oversized (>100MB) blobs already deleted from Vercel Blob.
+-- Clear portfolio file URLs that pointed at oversized (>100MB) files already deleted from legacy Vercel Blob.
 -- Safe to run once in Supabase SQL editor if CMS still references the dead URLs.
 
 UPDATE public.site_content

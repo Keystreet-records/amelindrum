@@ -1,5 +1,5 @@
 -- LEGACY: Supabase Storage bucket for site media.
--- Current stack uses Vercel Blob instead — do not rely on this for new setups.
+-- Current stack uses Cloudflare R2 — do not rely on this for new setups.
 -- Kept for projects that already applied it.
 
 -- Public media bucket for site assets (about portrait, etc.)

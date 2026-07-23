@@ -34,10 +34,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { uploadSiteMedia, deleteSiteMedia, type MediaKind, VIDEO_MAX_BYTES, VIDEO_MAX_MB } from "@/lib/media-upload";
 import { optimizeImageFile, readImageDimensions } from "@/lib/image-optimize";
-import { proxiedMediaUrl } from "@/lib/media-url";
+import { ReliableImage } from "@/components/media/reliable-image";
 import { polishLabel } from "@/lib/typography";
 
-const DEFAULT_PORTRAIT = "/media/portrait.jpg";
+const DEFAULT_PORTRAIT =
+  "https://pub-f451e2de580d495e85d97dc9d8e4fb71.r2.dev/portfolio/about/1784816328559-542a8c04.jpg";
 const FALLBACK_COVER = "/media/video-thumb-1.jpg";
 const VIDEO_FILE_MAX_BYTES = VIDEO_MAX_BYTES;
 const VIDEO_FILE_TYPES = new Set([
@@ -175,7 +176,11 @@ function useUploadTimeline() {
 
 function isDefaultPortrait(url: string): boolean {
   const trimmed = url.trim();
-  return !trimmed || trimmed === DEFAULT_PORTRAIT;
+  return (
+    !trimmed ||
+    trimmed === DEFAULT_PORTRAIT ||
+    trimmed === "/media/portrait.jpg"
+  );
 }
 
 const ABOUT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
@@ -1249,8 +1254,9 @@ function AboutPortraitEditor({
     <MediaPanel title={polishLabel("Фото в блоке «Обо мне»")}>
       <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-start">
         <div className="relative mx-auto aspect-[4/5] w-[132px] shrink-0 overflow-hidden rounded-xl border border-border bg-muted/20 sm:mx-0">
-          <img
-            src={proxiedMediaUrl(displaySrc)}
+          <ReliableImage
+            src={displaySrc}
+            fallbackSrc={DEFAULT_PORTRAIT}
             alt={polishLabel("Превью портрета")}
             className="h-full w-full object-cover object-[center_28%]"
           />
@@ -1415,8 +1421,9 @@ function VideoCoverEditor({
     <MediaPanel title={polishLabel("Обложка в карусели")}>
       <div className="flex min-w-0 flex-col gap-4">
         <div className="relative aspect-video w-full max-w-[220px] overflow-hidden rounded-lg border border-border bg-muted/20">
-          <img
-            src={proxiedMediaUrl(displaySrc)}
+          <ReliableImage
+            src={displaySrc}
+            fallbackSrc={FALLBACK_COVER}
             alt={polishLabel("Превью обложки")}
             className="absolute inset-0 h-full w-full object-cover object-center"
           />

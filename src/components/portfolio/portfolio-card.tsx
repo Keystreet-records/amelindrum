@@ -1,12 +1,11 @@
 import type { PortfolioVideo } from "@/lib/site-content";
-import { proxiedMediaUrl } from "@/lib/media-url";
+import { ReliableImage } from "@/components/media/reliable-image";
 import { cn } from "@/lib/utils";
-import { useEffect, useRef, useState } from "react";
 
 type PortfolioCardProps = {
   video: PortfolioVideo;
   thumbSrc: string;
-  /** Used when the custom/remote cover fails to decode. */
+  /** Local bundled thumb — always shown while remote (R2) loads. */
   fallbackSrc?: string;
   onOpen: () => void;
   className?: string;
@@ -33,11 +32,14 @@ export function PortfolioCard({
       )}
     >
       <div className="portfolio-card__media relative aspect-video overflow-hidden rounded-t-2xl bg-muted/30">
-        <PortfolioCoverImage
-          key={thumbSrc}
-          primary={thumbSrc}
-          fallback={fallbackSrc || ""}
+        <ReliableImage
+          src={thumbSrc}
+          fallbackSrc={fallbackSrc || ""}
           alt={video.title}
+          width={1280}
+          height={720}
+          loading="eager"
+          className="portfolio-card__thumb absolute inset-0 h-full w-full object-cover object-center"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-card via-card/25 to-transparent" />
         <div className="absolute inset-0 flex items-center justify-center">
@@ -71,67 +73,5 @@ export function PortfolioCard({
         )}
       </div>
     </button>
-  );
-}
-
-function resolveCoverSrc(url: string): string {
-  return proxiedMediaUrl(url);
-}
-
-function PortfolioCoverImage({
-  primary,
-  fallback,
-  alt,
-}: {
-  primary: string;
-  fallback: string;
-  alt: string;
-}) {
-  const imgRef = useRef<HTMLImageElement>(null);
-  const [src, setSrc] = useState(() => resolveCoverSrc(primary));
-  const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    setSrc(resolveCoverSrc(primary));
-    setReady(false);
-  }, [primary]);
-
-  useEffect(() => {
-    const el = imgRef.current;
-    if (el?.complete && el.naturalWidth > 0) setReady(true);
-  }, [src]);
-
-  // R2 sometimes stalls mid-transfer; don't leave a blank card forever.
-  useEffect(() => {
-    if (ready) return;
-    const timer = window.setTimeout(() => {
-      const next = fallback ? resolveCoverSrc(fallback) : "";
-      if (next && src !== next) setSrc(next);
-    }, 8_000);
-    return () => window.clearTimeout(timer);
-  }, [src, ready, fallback]);
-
-  return (
-    <img
-      ref={imgRef}
-      src={src}
-      alt={alt}
-      /* Lazy: R2 covers can stall; eager images block window `load` → endless tab spinner */
-      loading="lazy"
-      decoding="async"
-      fetchPriority="low"
-      width={1280}
-      height={720}
-      className={cn(
-        "portfolio-card__thumb absolute inset-0 h-full w-full object-cover object-center transition-opacity duration-300",
-        ready ? "opacity-100" : "opacity-0",
-      )}
-      onLoad={() => setReady(true)}
-      onError={() => {
-        setReady(false);
-        const next = fallback ? resolveCoverSrc(fallback) : "";
-        if (next && src !== next) setSrc(next);
-      }}
-    />
   );
 }

@@ -95,7 +95,7 @@ R2_BUCKET_NAME=amelindrum-media
 R2_PUBLIC_BASE_URL=https://media.yourdomain.com
 ```
 
-Старые URL `*.public.blob.vercel-storage.com` ещё читаются через `/api/media-proxy`; новые загрузки (видео, обложки, портрет) идут в R2 по прямому публичному URL. Перезалейте медиа в админке, чтобы уйти с Blob.
+Медиа (видео, обложки, портрет) хранятся в R2 и отдаются по прямому публичному URL.
 
 ## Деплой (практичный путь)
 

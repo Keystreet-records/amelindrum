@@ -1,5 +1,4 @@
 import { supabase } from "@/integrations/supabase/client";
-import { isVercelBlobUrl } from "@/lib/media-url";
 import { prepareVideoForUpload, VIDEO_MAX_BYTES, VIDEO_MAX_MB } from "@/lib/mp4-faststart";
 
 export type MediaKind = "image" | "video";
@@ -95,6 +94,7 @@ type PresignResponse = {
   uploadUrl?: string;
   publicUrl?: string;
   key?: string;
+  cacheControl?: string;
   error?: string;
 };
 
@@ -103,11 +103,15 @@ function putFileWithProgress(
   file: File,
   contentType: string,
   onProgress?: (progress: MediaUploadProgress) => void,
+  cacheControl?: string,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", uploadUrl);
     xhr.setRequestHeader("Content-Type", contentType);
+    if (cacheControl) {
+      xhr.setRequestHeader("Cache-Control", cacheControl);
+    }
 
     xhr.upload.onprogress = (event) => {
       if (!event.lengthComputable) return;
@@ -206,7 +210,13 @@ export async function uploadSiteMedia(
       throw new Error("Хранилище не вернуло URL файла");
     }
 
-    await putFileWithProgress(payload.uploadUrl, uploadFile, contentType, options.onProgress);
+    await putFileWithProgress(
+      payload.uploadUrl,
+      uploadFile,
+      contentType,
+      options.onProgress,
+      payload.cacheControl,
+    );
 
     options.onProgress?.({ phase: "done", loaded: total, total, percentage: 100 });
     return {
@@ -224,8 +234,6 @@ export async function uploadSiteMedia(
 export async function deleteSiteMedia(url: string): Promise<void> {
   const trimmed = url.trim();
   if (!trimmed) return;
-  // Legacy Vercel Blob URLs are no longer managed — unlinking in CMS is enough.
-  if (isVercelBlobUrl(trimmed)) return;
 
   const token = await getAccessToken();
   const res = await fetch("/api/media-delete", {
