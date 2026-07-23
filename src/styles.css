@@ -341,17 +341,6 @@
       oklch(0.12 0.01 60 / 0.55) 100%
     );
   }
-  .hero-sweep {
-    background: linear-gradient(
-      105deg,
-      transparent 0%,
-      oklch(1 0 0 / 0.04) 35%,
-      oklch(1 0 0 / 0.22) 50%,
-      oklch(1 0 0 / 0.04) 65%,
-      transparent 100%
-    );
-    mix-blend-mode: soft-light;
-  }
 }
 
 @layer utilities {
@@ -388,19 +377,20 @@
 
   .btn-soft {
     transition:
-      transform 280ms var(--ease-out),
-      opacity 280ms var(--ease-out),
-      background-color 320ms ease,
-      border-color 320ms ease,
-      box-shadow 320ms var(--ease-out);
-    will-change: transform;
+      translate 240ms var(--ease-out),
+      scale 240ms var(--ease-out),
+      opacity 240ms var(--ease-out),
+      background-color 280ms var(--ease-out),
+      border-color 280ms var(--ease-out),
+      box-shadow 280ms var(--ease-out);
   }
   .btn-soft:hover {
-    transform: translateY(-1px) scale(1.02);
+    translate: 0 -1px;
+    scale: 1.02;
   }
   .btn-soft:active {
-    transform: scale(0.97);
-    transition-duration: 120ms;
+    scale: 0.97;
+    transition-duration: 100ms;
   }
   .btn-ember {
     background-image: var(--gradient-ember);
@@ -622,8 +612,8 @@
   .service-card {
     overflow: visible;
     transition:
-      transform 420ms var(--ease-out),
-      border-color 380ms ease,
+      translate 380ms var(--ease-out),
+      border-color 380ms var(--ease-out),
       box-shadow 420ms var(--ease-out);
   }
   .service-card__title {
@@ -635,7 +625,8 @@
     }
   }
   .service-card:hover {
-    transform: translateY(-3px);
+    /* `translate` is independent of GSAP `transform` — no fight with reveals */
+    translate: 0 -3px;
     border-color: color-mix(in oklch, var(--primary) 48%, var(--border));
     box-shadow:
       0 0 0 1px color-mix(in oklch, var(--primary) 26%, transparent),
@@ -844,6 +835,8 @@
   .nav-link::after {
     transition: none !important;
     transform: none !important;
+    translate: none !important;
+    scale: none !important;
   }
   [data-motion],
   [data-reveal] {
@@ -855,9 +848,6 @@
   }
   [data-hero="veil"] {
     opacity: 0 !important;
-  }
-  [data-hero="sweep"] {
-    display: none !important;
   }
   body::after {
     transform: none !important;

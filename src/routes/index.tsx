@@ -78,17 +78,19 @@ function Hero({ c }: { c: SiteContent }) {
   return (
     <section id="top" className="relative min-h-screen min-h-dvh overflow-x-clip grain touch-pan-y">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <img
-          src={HERO_IMG}
-          alt="Аркадий Амелин за барабанной установкой — вид сверху"
-          data-parallax="hero-image"
-          data-hero="image"
-          className="hero-image h-[108%] w-full object-cover object-[88%_42%] sm:object-[75%_40%] md:object-[center_40%] md:will-change-transform"
-          width={1024}
-          height={683}
-          fetchPriority="high"
-          draggable={false}
-        />
+        {/* Parallax on wrapper; intro scale on the image — never both on one node */}
+        <div data-parallax="hero-image" className="absolute inset-0 md:will-change-transform">
+          <img
+            src={HERO_IMG}
+            alt="Аркадий Амелин за барабанной установкой — вид сверху"
+            data-hero="image"
+            className="hero-image h-[108%] w-full object-cover object-[88%_42%] sm:object-[75%_40%] md:object-[center_40%]"
+            width={1024}
+            height={683}
+            fetchPriority="high"
+            draggable={false}
+          />
+        </div>
         <div
           data-hero="veil"
           className="hero-veil absolute inset-0 bg-background"
@@ -100,11 +102,6 @@ function Hero({ c }: { c: SiteContent }) {
           aria-hidden
         />
         <div className="hero-vignette absolute inset-0" aria-hidden />
-        <div
-          data-hero="sweep"
-          className="hero-sweep absolute inset-y-0 -left-1/3 w-1/3 md:will-change-transform"
-          aria-hidden
-        />
       </div>
 
       <div
@@ -197,7 +194,7 @@ function About({ c }: { c: SiteContent }) {
               loading="eager"
               width={1024}
               height={1536}
-              className="h-full w-full object-cover object-[center_28%] scale-[1.04]"
+              className="h-full w-full object-cover object-[center_28%]"
             />
           </div>
         </div>
@@ -260,29 +257,27 @@ function Services({ c }: { c: SiteContent }) {
         </div>
         <div className="services-grid grid gap-5 md:grid-cols-3">
           {c.services.items.map((s) => (
-            <article
-              key={s.n + s.t}
-              data-reveal="card"
-              className="service-card group relative flex h-full flex-col rounded-2xl border border-border bg-card p-6 shadow-card md:p-7"
-            >
-              <div className="font-display text-5xl text-primary/55 transition-colors duration-500 group-hover:text-primary md:text-6xl">
-                {s.n}
-              </div>
-              <h3 className="service-card__title mt-4 font-display text-2xl leading-tight md:text-3xl">
-                {s.t}
-              </h3>
-              <p className="mt-3 flex-1 text-muted-foreground leading-relaxed">{s.d}</p>
-              <div className="mt-5 flex flex-wrap gap-2">
-                {s.tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded-full border border-border/80 bg-secondary/30 px-3 py-1 text-xs text-muted-foreground"
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            </article>
+            <div key={s.n + s.t} data-reveal="card" className="h-full">
+              <article className="service-card group relative flex h-full flex-col rounded-2xl border border-border bg-card p-6 shadow-card md:p-7">
+                <div className="font-display text-5xl text-primary/55 transition-colors duration-500 group-hover:text-primary md:text-6xl">
+                  {s.n}
+                </div>
+                <h3 className="service-card__title mt-4 font-display text-2xl leading-tight md:text-3xl">
+                  {s.t}
+                </h3>
+                <p className="mt-3 flex-1 text-muted-foreground leading-relaxed">{s.d}</p>
+                <div className="mt-5 flex flex-wrap gap-2">
+                  {s.tags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-full border border-border/80 bg-secondary/30 px-3 py-1 text-xs text-muted-foreground"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </article>
+            </div>
           ))}
         </div>
       </div>

@@ -3,6 +3,7 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import type { RefObject } from "react";
 import { prefersReducedMotion } from "@/lib/motion/prefs";
+import { MOTION } from "@/lib/motion/tokens";
 
 gsap.registerPlugin(useGSAP, ScrollTrigger);
 
@@ -24,7 +25,8 @@ export function useNavMotion(headerRef: RefObject<HTMLElement | null>) {
       const update = () => {
         const vh = window.innerHeight || 1;
         const scrollY = window.scrollY || 0;
-        const fadeStart = vh * 0.2;
+        // Align with hero fade window (top → ~65% VH)
+        const fadeStart = vh * 0.15;
         const fadeEnd = vh * 0.65;
         const progress = Math.min(1, Math.max(0, (scrollY - fadeStart) / (fadeEnd - fadeStart)));
         setNavAlpha(header, progress);
@@ -52,10 +54,10 @@ export function useNavBeat(dotRef: RefObject<HTMLElement | null>) {
     () => {
       if (prefersReducedMotion() || !dotRef.current) return;
       gsap.to(dotRef.current, {
-        scale: 1.12,
+        scale: 1.1,
         opacity: 1,
-        duration: 0.9,
-        ease: "sine.inOut",
+        duration: MOTION.dur.enter,
+        ease: MOTION.ease.beat,
         repeat: -1,
         yoyo: true,
       });

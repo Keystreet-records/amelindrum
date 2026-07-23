@@ -113,7 +113,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     ],
     scripts: [
       {
-        children: `setTimeout(function(){document.documentElement.classList.add("motion-failsafe")},2200);`,
+        children: `setTimeout(function(){document.documentElement.classList.add("motion-failsafe")},2000);`,
       },
     ],
   }),

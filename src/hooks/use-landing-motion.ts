@@ -3,6 +3,7 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import type { RefObject } from "react";
 import { prefersReducedMotion, prefersTouchScroll } from "@/lib/motion/prefs";
+import { MOTION } from "@/lib/motion/tokens";
 
 gsap.registerPlugin(useGSAP, ScrollTrigger);
 
@@ -10,17 +11,22 @@ const HERO_MOTION = "[data-motion='hero-name'], [data-motion='hero-desc'], [data
 const SECTION_REVEALS =
   "[data-reveal='section'], [data-reveal='card'], [data-reveal='row'], [data-reveal='stat'], [data-reveal='portrait']";
 
+function clearHtmlFailsafe() {
+  document.documentElement.classList.remove("motion-failsafe");
+}
+
 function forceVisible(root: HTMLElement) {
   gsap.set(root.querySelectorAll("[data-motion], [data-reveal]"), {
     autoAlpha: 1,
     y: 0,
     x: 0,
     scale: 1,
+    clearProps: "transform",
   });
-  gsap.set(root.querySelectorAll("[data-hero='image']"), { scale: 1 });
+  gsap.set(root.querySelectorAll("[data-hero='image']"), { scale: 1, clearProps: "transform" });
   gsap.set(root.querySelectorAll("[data-hero='veil']"), { autoAlpha: 0 });
-  gsap.set(root.querySelectorAll("[data-hero='sweep']"), { autoAlpha: 0 });
   root.dataset.motionBoot = "done";
+  clearHtmlFailsafe();
 }
 
 export function useLandingMotion(rootRef: RefObject<HTMLElement | null>) {
@@ -41,90 +47,112 @@ export function useLandingMotion(rootRef: RefObject<HTMLElement | null>) {
 
       const failSafe = window.setTimeout(() => {
         if (!introDone) forceVisible(root);
-      }, 1800);
+      }, MOTION.failsafeMs);
 
       const markDone = () => {
         introDone = true;
         window.clearTimeout(failSafe);
         root.dataset.motionBoot = "done";
+        clearHtmlFailsafe();
+        // Late images/fonts can shift section tops — re-measure once after intro.
+        ScrollTrigger.refresh();
       };
 
       const ctx = gsap.context(() => {
-        gsap.set(HERO_MOTION, { autoAlpha: 0, y: 20 });
+        gsap.set(HERO_MOTION, { autoAlpha: 0, y: MOTION.intro.textY });
         gsap.set(SECTION_REVEALS, { autoAlpha: 0 });
-        gsap.set("[data-reveal='portrait']", { scale: 1.03 });
-        gsap.set("[data-hero='image']", { scale: 1.06 });
+        gsap.set("[data-reveal='portrait']", { y: MOTION.reveal.portraitY });
+        gsap.set("[data-hero='image']", { scale: MOTION.intro.imageScale });
         gsap.set("[data-hero='veil']", { autoAlpha: 0.4 });
-        gsap.set("[data-hero='sweep']", { autoAlpha: 0 });
 
         root.dataset.motionBoot = "ready";
 
-        // Keep intro on transform/opacity only — no filter, no blend thrash.
         const intro = gsap.timeline({
-          defaults: { ease: "power2.out" },
+          defaults: { ease: MOTION.ease.out },
           onComplete: markDone,
         });
 
         intro
-          .to("[data-hero='image']", { scale: 1, duration: 0.95, ease: "power2.out" }, 0)
-          .to("[data-hero='veil']", { autoAlpha: 0, duration: 0.85 }, 0)
+          .to(
+            "[data-hero='image']",
+            { scale: 1, duration: MOTION.dur.hero, ease: MOTION.ease.out },
+            0,
+          )
+          .to("[data-hero='veil']", { autoAlpha: 0, duration: MOTION.dur.enter }, 0)
           .to(
             "[data-motion='hero-name']",
-            { autoAlpha: 1, y: 0, duration: 0.7 },
-            0.18,
+            { autoAlpha: 1, y: 0, duration: MOTION.dur.enter },
+            MOTION.intro.nameAt,
           )
           .to(
             "[data-motion='hero-desc']",
-            { autoAlpha: 1, y: 0, duration: 0.65 },
-            0.3,
+            { autoAlpha: 1, y: 0, duration: MOTION.dur.enter },
+            MOTION.intro.descAt,
           )
           .to(
             "[data-motion='hero-cta']",
-            { autoAlpha: 1, y: 0, duration: 0.55, stagger: 0.07 },
-            0.42,
+            {
+              autoAlpha: 1,
+              y: 0,
+              duration: MOTION.dur.base,
+              stagger: MOTION.stagger.base,
+            },
+            MOTION.intro.ctaAt,
           );
 
+        // Desktop only: parallax on wrappers (intro scale stays on the <img>).
         if (!touchScroll) {
           gsap.to("[data-parallax='hero-image']", {
-            y: 120,
-            ease: "none",
+            y: MOTION.parallax.heroImageY,
+            ease: MOTION.ease.scrub,
             scrollTrigger: {
               trigger: "#top",
               start: "top top",
               end: "bottom top",
-              scrub: 0.6,
+              scrub: MOTION.scrub,
             },
           });
 
           gsap.to("[data-parallax='hero-content']", {
-            y: -40,
-            ease: "none",
+            y: MOTION.parallax.heroContentY,
+            ease: MOTION.ease.scrub,
             scrollTrigger: {
               trigger: "#top",
               start: "top top",
               end: "65% top",
-              scrub: 0.4,
+              scrub: MOTION.scrub,
+            },
+          });
+
+          gsap.to("[data-fade='hero-text']", {
+            autoAlpha: 0,
+            ease: MOTION.ease.scrub,
+            scrollTrigger: {
+              trigger: "#top",
+              start: "top top",
+              end: "65% top",
+              scrub: MOTION.scrub,
+            },
+          });
+
+          gsap.to("[data-parallax='marquee']", {
+            opacity: MOTION.parallax.marqueeOpacity,
+            ease: MOTION.ease.scrub,
+            scrollTrigger: {
+              trigger: "[data-section='marquee']",
+              start: "top bottom",
+              end: "bottom top",
+              scrub: MOTION.scrub,
             },
           });
         }
-
-        gsap.to("[data-fade='hero-text']", {
-          autoAlpha: 0,
-          ease: "none",
-          scrollTrigger: {
-            trigger: "#top",
-            start: "top top",
-            end: "65% top",
-            scrub: touchScroll ? true : 0.4,
-          },
-        });
 
         const revealBatch = (
           selector: string,
           from: gsap.TweenVars,
           duration: number,
           stagger: number,
-          start = "top 90%",
+          start: string = MOTION.reveal.start,
         ) => {
           ScrollTrigger.batch(selector, {
             start,
@@ -137,45 +165,57 @@ export function useLandingMotion(rootRef: RefObject<HTMLElement | null>) {
                 scale: 1,
                 duration,
                 stagger,
-                ease: "power2.out",
+                ease: MOTION.ease.out,
                 overwrite: "auto",
               });
             },
           });
         };
 
-        revealBatch("[data-reveal='section']", { y: 28, autoAlpha: 0 }, 0.7, 0.07, "top 88%");
+        revealBatch(
+          "[data-reveal='section']",
+          { y: MOTION.reveal.sectionY, autoAlpha: 0 },
+          MOTION.dur.enter,
+          MOTION.stagger.base,
+        );
         revealBatch(
           "[data-reveal='card']",
-          { y: 32, autoAlpha: 0, scale: 0.99 },
-          0.7,
-          0.09,
-          "top 91%",
+          { y: MOTION.reveal.cardY, autoAlpha: 0 },
+          MOTION.dur.enter,
+          MOTION.stagger.loose,
         );
-        revealBatch("[data-reveal='row']", { x: -14, autoAlpha: 0 }, 0.6, 0.05, "top 93%");
-        revealBatch("[data-reveal='stat']", { y: 14, autoAlpha: 0 }, 0.55, 0.07, "top 92%");
+        revealBatch(
+          "[data-reveal='row']",
+          { x: MOTION.reveal.rowX, autoAlpha: 0 },
+          MOTION.dur.base,
+          MOTION.stagger.tight,
+        );
+        revealBatch(
+          "[data-reveal='stat']",
+          { y: MOTION.reveal.statY, autoAlpha: 0 },
+          MOTION.dur.base,
+          MOTION.stagger.base,
+        );
         revealBatch(
           "[data-reveal='portrait']",
-          { scale: 1.03, autoAlpha: 0 },
-          0.85,
+          { y: MOTION.reveal.portraitY, autoAlpha: 0 },
+          MOTION.dur.hero,
           0,
-          "top bottom",
+          MOTION.reveal.portraitStart,
         );
-
-        gsap.to("[data-parallax='marquee']", {
-          opacity: 0.55,
-          ease: "none",
-          scrollTrigger: {
-            trigger: "[data-section='marquee']",
-            start: "top bottom",
-            end: "bottom top",
-            scrub: true,
-          },
-        });
       }, root);
+
+      const onLoad = () => ScrollTrigger.refresh();
+      window.addEventListener("load", onLoad, { once: true });
+      if (document.fonts?.ready) {
+        void document.fonts.ready.then(() => {
+          if (root.isConnected) ScrollTrigger.refresh();
+        });
+      }
 
       return () => {
         window.clearTimeout(failSafe);
+        window.removeEventListener("load", onLoad);
         ctx.revert();
         delete root.dataset.motionBoot;
       };
@@ -197,16 +237,44 @@ export function animateVideoModal(
 
   if (direction === "in") {
     gsap.set(overlay, { autoAlpha: 0 });
-    gsap.set(panel, { autoAlpha: 0, y: 24, scale: 0.98 });
+    gsap.set(panel, { autoAlpha: 0, y: 18, scale: 0.985 });
     gsap
       .timeline({ onComplete })
-      .to(overlay, { autoAlpha: 1, duration: 0.3, ease: "power2.out" })
-      .to(panel, { autoAlpha: 1, y: 0, scale: 1, duration: 0.45, ease: "power3.out" }, "-=0.18");
+      .to(overlay, {
+        autoAlpha: 1,
+        duration: MOTION.dur.fast,
+        ease: MOTION.ease.out,
+      })
+      .to(
+        panel,
+        {
+          autoAlpha: 1,
+          y: 0,
+          scale: 1,
+          duration: MOTION.dur.modalIn,
+          ease: MOTION.ease.modal,
+        },
+        "-=0.16",
+      );
     return;
   }
 
   gsap
     .timeline({ onComplete })
-    .to(panel, { autoAlpha: 0, y: 14, scale: 0.98, duration: 0.24, ease: "power2.in" })
-    .to(overlay, { autoAlpha: 0, duration: 0.22, ease: "power2.in" }, "-=0.1");
+    .to(panel, {
+      autoAlpha: 0,
+      y: 10,
+      scale: 0.985,
+      duration: MOTION.dur.modalOut,
+      ease: MOTION.ease.in,
+    })
+    .to(
+      overlay,
+      {
+        autoAlpha: 0,
+        duration: MOTION.dur.modalOut,
+        ease: MOTION.ease.in,
+      },
+      "-=0.08",
+    );
 }
