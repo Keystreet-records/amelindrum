@@ -8,8 +8,6 @@ import { MOTION } from "@/lib/motion/tokens";
 gsap.registerPlugin(useGSAP, ScrollTrigger);
 
 const HERO_MOTION = "[data-motion='hero-name'], [data-motion='hero-desc'], [data-motion='hero-cta']";
-const SECTION_REVEALS =
-  "[data-reveal='section'], [data-reveal='card'], [data-reveal='row'], [data-reveal='stat'], [data-reveal='portrait']";
 
 function clearHtmlFailsafe() {
   document.documentElement.classList.remove("motion-failsafe");
@@ -35,6 +33,7 @@ export function useLandingMotion(rootRef: RefObject<HTMLElement | null>) {
       const root = rootRef.current;
       if (!root) return;
 
+      // Mark immediately so CSS gate is short-lived even if setup throws.
       root.dataset.motionBoot = "pending";
 
       if (prefersReducedMotion()) {
@@ -54,16 +53,16 @@ export function useLandingMotion(rootRef: RefObject<HTMLElement | null>) {
         window.clearTimeout(failSafe);
         root.dataset.motionBoot = "done";
         clearHtmlFailsafe();
-        // Late images/fonts can shift section tops — re-measure once after intro.
         ScrollTrigger.refresh();
       };
 
-      const ctx = gsap.context(() => {
+      let ctx: gsap.Context;
+      try {
+        ctx = gsap.context(() => {
+        // Hero only — section reveals stay visible until ScrollTrigger hides below-fold ones.
         gsap.set(HERO_MOTION, { autoAlpha: 0, y: MOTION.intro.textY });
-        gsap.set(SECTION_REVEALS, { autoAlpha: 0 });
-        gsap.set("[data-reveal='portrait']", { y: MOTION.reveal.portraitY });
         gsap.set("[data-hero='image']", { scale: MOTION.intro.imageScale });
-        gsap.set("[data-hero='veil']", { autoAlpha: 0.4 });
+        gsap.set("[data-hero='veil']", { autoAlpha: 0.35 });
 
         root.dataset.motionBoot = "ready";
 
@@ -154,11 +153,17 @@ export function useLandingMotion(rootRef: RefObject<HTMLElement | null>) {
           stagger: number,
           start: string = MOTION.reveal.start,
         ) => {
-          ScrollTrigger.batch(selector, {
+          const nodes = gsap.utils.toArray<HTMLElement>(selector);
+          if (!nodes.length) return;
+
+          // Hide only after JS is alive — if setup fails, SSR content stays visible.
+          gsap.set(nodes, { ...from, autoAlpha: 0 });
+
+          ScrollTrigger.batch(nodes, {
             start,
             once: true,
             onEnter: (elements) => {
-              gsap.fromTo(elements, from, {
+              gsap.to(elements, {
                 autoAlpha: 1,
                 y: 0,
                 x: 0,
@@ -174,36 +179,41 @@ export function useLandingMotion(rootRef: RefObject<HTMLElement | null>) {
 
         revealBatch(
           "[data-reveal='section']",
-          { y: MOTION.reveal.sectionY, autoAlpha: 0 },
+          { y: MOTION.reveal.sectionY },
           MOTION.dur.enter,
           MOTION.stagger.base,
         );
         revealBatch(
           "[data-reveal='card']",
-          { y: MOTION.reveal.cardY, autoAlpha: 0 },
+          { y: MOTION.reveal.cardY },
           MOTION.dur.enter,
           MOTION.stagger.loose,
         );
         revealBatch(
           "[data-reveal='row']",
-          { x: MOTION.reveal.rowX, autoAlpha: 0 },
+          { x: MOTION.reveal.rowX },
           MOTION.dur.base,
           MOTION.stagger.tight,
         );
         revealBatch(
           "[data-reveal='stat']",
-          { y: MOTION.reveal.statY, autoAlpha: 0 },
+          { y: MOTION.reveal.statY },
           MOTION.dur.base,
           MOTION.stagger.base,
         );
         revealBatch(
           "[data-reveal='portrait']",
-          { y: MOTION.reveal.portraitY, autoAlpha: 0 },
+          { y: MOTION.reveal.portraitY },
           MOTION.dur.hero,
           0,
           MOTION.reveal.portraitStart,
         );
-      }, root);
+        }, root);
+      } catch (err) {
+        console.error("[motion] boot failed", err);
+        forceVisible(root);
+        return;
+      }
 
       const onLoad = () => ScrollTrigger.refresh();
       window.addEventListener("load", onLoad, { once: true });

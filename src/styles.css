@@ -307,22 +307,19 @@
       transform-origin: 50% 40%;
     }
   }
-  /* First paint: hide entrance targets until GSAP boots (no visible→hidden flash) */
+  /* First paint: only hero copy is gated (sections stay visible if JS is slow). */
   .landing-root:not([data-motion-boot]) [data-motion],
-  .landing-root[data-motion-boot="pending"] [data-motion],
-  .landing-root:not([data-motion-boot]) [data-reveal],
-  .landing-root[data-motion-boot="pending"] [data-reveal] {
+  .landing-root[data-motion-boot="pending"] [data-motion] {
     opacity: 0;
   }
   .landing-root:not([data-motion-boot="ready"]):not([data-motion-boot="done"]) [data-hero="image"] {
-    transform: scale(1.06);
+    transform: scale(1.05);
   }
   .landing-root:not([data-motion-boot="ready"]):not([data-motion-boot="done"]) [data-hero="veil"] {
-    opacity: 0.4;
+    opacity: 0.35;
   }
-  /* If JS is slow/broken, reveal content after boot script sets this class */
-  html.motion-failsafe .landing-root [data-motion],
-  html.motion-failsafe .landing-root [data-reveal] {
+  /* Failsafe if GSAP never boots — hero copy must appear */
+  html.motion-failsafe .landing-root [data-motion] {
     opacity: 1 !important;
   }
   html.motion-failsafe .landing-root [data-hero="veil"] {

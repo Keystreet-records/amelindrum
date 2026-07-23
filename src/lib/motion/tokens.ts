@@ -2,7 +2,7 @@
 
 export const MOTION = {
   /** Failsafe clock (ms) — keep in sync with __root.tsx inline script */
-  failsafeMs: 2000,
+  failsafeMs: 800,
 
   dur: {
     instant: 0.2,
