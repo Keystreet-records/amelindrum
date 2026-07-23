@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useId, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Check, Loader2, Upload } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   DEFAULT_CONTENT,
@@ -11,13 +12,37 @@ import {
   type SiteContent,
 } from "@/lib/site-content";
 import { getAdminSiteContent, saveAdminSiteContent } from "@/lib/site-content.functions";
-import { uploadSiteMedia } from "@/lib/media-upload";
-import { polishBody, polishLabel, polishTitle } from "@/lib/typography";
+import {
+  Field,
+  FileMeta,
+  fileNameFromUrl,
+  ItemCard,
+  MediaPanel,
+  Section,
+  SegmentedControl,
+  StatusMessage,
+  Subsection,
+  TextArea,
+  adminControlClass,
+} from "@/components/admin/admin-form";
+import {
+  UploadTimelineLoader,
+  type UploadTimelineState,
+} from "@/components/admin/upload-timeline-loader";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { uploadSiteMedia, type MediaKind } from "@/lib/media-upload";
+import { polishLabel } from "@/lib/typography";
 
 const DEFAULT_PORTRAIT = "/media/portrait.jpg";
 const FALLBACK_COVER = "/media/video-thumb-1.jpg";
 const VIDEO_FILE_MAX_BYTES = 200 * 1024 * 1024;
-const VIDEO_FILE_TYPES = new Set(["video/mp4", "video/webm", "video/quicktime"]);
+const VIDEO_FILE_TYPES = new Set([
+  "video/mp4",
+  "video/webm",
+  "video/quicktime",
+  "video/x-m4v",
+]);
 
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error && err.message) return err.message;
@@ -26,6 +51,82 @@ function errorMessage(err: unknown, fallback: string): string {
     if (typeof message === "string" && message) return message;
   }
   return fallback;
+}
+
+function useUploadTimeline() {
+  const [timeline, setTimeline] = useState<UploadTimelineState | null>(null);
+  const uploading =
+    timeline?.status === "preparing" || timeline?.status === "uploading";
+
+  async function runUpload(
+    file: File,
+    options: { kind: MediaKind; folder: string },
+  ): Promise<{ url: string; remuxed: boolean; size: number; warning?: string }> {
+    setTimeline({
+      fileName: file.name,
+      fileSize: file.size,
+      progress: 0,
+      status: "preparing",
+    });
+
+    try {
+      const result = await uploadSiteMedia(file, {
+        ...options,
+        onProgress: (progress) => {
+          setTimeline((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  fileSize: progress.total || prev.fileSize,
+                  status: progress.phase === "done" ? "done" : progress.phase,
+                  progress: progress.percentage,
+                }
+              : prev,
+          );
+        },
+      });
+      setTimeline((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: "done",
+              progress: 100,
+              fileSize: result.size,
+            }
+          : prev,
+      );
+      return {
+        url: result.url,
+        remuxed: result.remuxed,
+        size: result.size,
+        warning: result.warning,
+      };
+    } catch (err: unknown) {
+      const message = errorMessage(err, "Ошибка загрузки");
+      setTimeline((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: "error",
+              errorMessage: message,
+            }
+          : {
+              fileName: file.name,
+              fileSize: file.size,
+              progress: 0,
+              status: "error",
+              errorMessage: message,
+            },
+      );
+      throw err;
+    }
+  }
+
+  function clearTimeline() {
+    setTimeline(null);
+  }
+
+  return { timeline, uploading, runUpload, clearTimeline };
 }
 
 function isDefaultPortrait(url: string): boolean {
@@ -143,67 +244,71 @@ function AdminPage() {
 
   if (checking) {
     return (
-      <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
-        Загрузка...
+      <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">
+        <Loader2 className="mr-2 size-4 animate-spin" />
+        {polishLabel("Загрузка…")}
       </div>
     );
   }
 
   if (!signedIn || !isAdmin) {
     return (
-      <div className="min-h-screen bg-background text-foreground flex items-center justify-center px-6">
+      <div className="flex min-h-screen items-center justify-center bg-background px-6 text-foreground">
         <div className="w-full max-w-md">
-          <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">
-            ← На сайт
+          <Link to="/" className="text-sm text-muted-foreground transition hover:text-foreground">
+            ← {polishLabel("На сайт")}
           </Link>
-          <h1 className="font-display text-4xl mt-6 mb-2">Вход в админку</h1>
-          <p className="text-muted-foreground mb-8 text-sm">
-            Введите email и пароль администратора.
+          <h1 className="font-display mt-6 mb-2 text-4xl">{polishLabel("Вход в админку")}</h1>
+          <p className="mb-8 text-sm text-muted-foreground">
+            {polishLabel("Введите email и пароль администратора.")}
           </p>
           <form onSubmit={onLogin} className="space-y-4">
             <div>
-              <label className="block text-xs uppercase tracking-widest text-muted-foreground mb-2">
-                Email
-              </label>
-              <input
+              <label className="mb-1.5 block text-sm font-medium text-foreground/90">Email</label>
+              <Input
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-lg border border-border bg-card px-4 py-3 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/60"
+                className={adminControlClass}
+                autoComplete="username"
               />
             </div>
             <div>
-              <label className="block text-xs uppercase tracking-widest text-muted-foreground mb-2">
-                Пароль
+              <label className="mb-1.5 block text-sm font-medium text-foreground/90">
+                {polishLabel("Пароль")}
               </label>
-              <input
+              <Input
                 type="password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-lg border border-border bg-card px-4 py-3 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/60"
+                className={adminControlClass}
+                autoComplete="current-password"
               />
             </div>
-            {loginError && <div className="text-sm text-red-400">{loginError}</div>}
+            {loginError && <StatusMessage tone="error">{loginError}</StatusMessage>}
             {signedIn && !isAdmin && (
-              <div className="text-sm text-red-400">Этот аккаунт не является администратором.</div>
+              <StatusMessage tone="error">
+                {polishLabel("Этот аккаунт не является администратором.")}
+              </StatusMessage>
             )}
-            <button
+            <Button
               type="submit"
               disabled={loggingIn}
-              className="w-full rounded-full bg-ember px-6 py-3.5 font-medium text-primary-foreground shadow-glow hover:opacity-90 disabled:opacity-50 transition"
+              className="h-11 w-full rounded-full bg-ember text-primary-foreground shadow-glow hover:bg-ember/90"
             >
-              {loggingIn ? "Загрузка..." : "Войти"}
-            </button>
+              {loggingIn ? polishLabel("Вход…") : polishLabel("Войти")}
+            </Button>
             {signedIn && (
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 onClick={signOut}
-                className="w-full text-sm text-muted-foreground hover:text-foreground"
+                className="w-full text-muted-foreground"
               >
-                Выйти
-              </button>
+                {polishLabel("Выйти")}
+              </Button>
             )}
           </form>
         </div>
@@ -213,8 +318,9 @@ function AdminPage() {
 
   if (!content) {
     return (
-      <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
-        Загрузка...
+      <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">
+        <Loader2 className="mr-2 size-4 animate-spin" />
+        {polishLabel("Загрузка…")}
       </div>
     );
   }
@@ -227,55 +333,83 @@ function AdminPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur">
-        <div className="mx-auto max-w-4xl flex items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-4">
-            <Link to="/" className="text-sm text-muted-foreground hover:text-foreground">
-              ← На сайт
+      <header className="sticky top-0 z-40 border-b border-border/80 bg-background/90 backdrop-blur-md">
+        <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-5 py-3.5 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+            <Link
+              to="/"
+              className="shrink-0 text-sm text-muted-foreground transition hover:text-foreground"
+            >
+              ← {polishLabel("На сайт")}
             </Link>
-            <h1 className="font-display text-xl">Админ-панель</h1>
+            <h1 className="font-display truncate text-lg sm:text-xl">
+              {polishLabel("Админ-панель")}
+            </h1>
           </div>
-          <div className="flex items-center gap-3">
-            {status && <span className="text-sm text-primary">{status}</span>}
-            <button
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            {status && (
+              <span className="hidden text-sm text-primary sm:inline">{status}</span>
+            )}
+            <Button
+              type="button"
               onClick={save}
               disabled={saving}
-              className="rounded-full bg-ember px-5 py-2 text-sm font-medium text-primary-foreground shadow-glow disabled:opacity-50"
+              className="h-9 rounded-full bg-ember px-4 text-primary-foreground shadow-glow hover:bg-ember/90 sm:px-5"
             >
-              {saving ? "..." : "Сохранить"}
-            </button>
-            <button
+              {saving ? (
+                <>
+                  <Loader2 className="size-3.5 animate-spin" />
+                  {polishLabel("Сохранение…")}
+                </>
+              ) : (
+                <>
+                  <Check className="size-3.5" />
+                  {polishLabel("Сохранить")}
+                </>
+              )}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
               onClick={signOut}
-              className="text-sm text-muted-foreground hover:text-foreground"
+              className="hidden h-9 text-muted-foreground sm:inline-flex"
             >
-              Выйти
-            </button>
+              {polishLabel("Выйти")}
+            </Button>
           </div>
         </div>
+        {status && (
+          <div className="border-t border-border/50 px-5 py-2 text-sm text-primary sm:hidden">
+            {status}
+          </div>
+        )}
       </header>
 
-      <main className="mx-auto max-w-4xl px-6 py-10 space-y-12">
-        <Section title="Первый экран (Hero)">
-          <Field
-            label="Имя (строка 1)"
-            value={content.hero.name1}
-            onChange={(v) =>
-              update((d) => {
-                d.hero.name1 = v;
-              })
-            }
-          />
-          <Field
-            label="Имя (строка 2)"
-            value={content.hero.name2}
-            onChange={(v) =>
-              update((d) => {
-                d.hero.name2 = v;
-              })
-            }
-          />
+      <main className="mx-auto max-w-4xl space-y-8 px-5 py-8 sm:px-6 sm:py-10">
+        <Section title={polishLabel("Первый экран (Hero)")}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label={polishLabel("Имя (строка 1)")}
+              value={content.hero.name1}
+              onChange={(v) =>
+                update((d) => {
+                  d.hero.name1 = v;
+                })
+              }
+            />
+            <Field
+              label={polishLabel("Имя (строка 2)")}
+              value={content.hero.name2}
+              onChange={(v) =>
+                update((d) => {
+                  d.hero.name2 = v;
+                })
+              }
+            />
+          </div>
           <TextArea
-            label="Описание (\n = перенос строки)"
+            label={polishLabel("Описание")}
+            hint={polishLabel("Перенос строки — через Enter")}
             value={content.hero.description}
             onChange={(v) =>
               update((d) => {
@@ -283,28 +417,31 @@ function AdminPage() {
               })
             }
           />
-          <Field
-            label="Кнопка 1"
-            value={content.hero.ctaPrimary}
-            onChange={(v) =>
-              update((d) => {
-                d.hero.ctaPrimary = v;
-              })
-            }
-          />
-          <Field
-            label="Кнопка 2"
-            value={content.hero.ctaSecondary}
-            onChange={(v) =>
-              update((d) => {
-                d.hero.ctaSecondary = v;
-              })
-            }
-          />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label={polishLabel("Кнопка 1")}
+              value={content.hero.ctaPrimary}
+              onChange={(v) =>
+                update((d) => {
+                  d.hero.ctaPrimary = v;
+                })
+              }
+            />
+            <Field
+              label={polishLabel("Кнопка 2")}
+              value={content.hero.ctaSecondary}
+              onChange={(v) =>
+                update((d) => {
+                  d.hero.ctaSecondary = v;
+                })
+              }
+            />
+          </div>
         </Section>
 
-        <Section title="Бегущая строка">
+        <Section title={polishLabel("Бегущая строка")}>
           <ArrayEditor
+            itemLabel={polishLabel("Фраза")}
             items={content.marquee}
             onChange={(v) =>
               update((d) => {
@@ -316,7 +453,7 @@ function AdminPage() {
           />
         </Section>
 
-        <Section title="Обо мне">
+        <Section title={polishLabel("Обо мне")}>
           <AboutPortraitEditor
             imageUrl={content.about.imageUrl}
             onChange={(url) =>
@@ -325,269 +462,296 @@ function AdminPage() {
               })
             }
           />
-          <Field
-            label="Подпись"
-            value={content.about.eyebrow}
-            onChange={(v) =>
-              update((d) => {
-                d.about.eyebrow = v;
-              })
-            }
-          />
-          <Field
-            label="Заголовок"
-            polish="title"
-            value={content.about.heading}
-            onChange={(v) =>
-              update((d) => {
-                d.about.heading = v;
-              })
-            }
-          />
-          <div className="text-xs uppercase tracking-widest text-muted-foreground mt-4">Абзацы</div>
-          <ArrayEditor
-            items={content.about.paragraphs}
-            onChange={(v) =>
-              update((d) => {
-                d.about.paragraphs = v;
-              })
-            }
-            render={(item, set) => <TextArea label="" value={item} onChange={set} />}
-            newItem={() => ""}
-          />
-          <div className="text-xs uppercase tracking-widest text-muted-foreground mt-4">Цифры</div>
-          <ArrayEditor
-            items={content.about.stats}
-            onChange={(v) =>
-              update((d) => {
-                d.about.stats = v;
-              })
-            }
-            render={(item, set) => (
-              <div className="grid grid-cols-2 gap-2">
-                <Field
-                  label="Число"
-                  polish="none"
-                  value={item.n}
-                  onChange={(v) => set({ ...item, n: v })}
-                />
-                <Field label="Подпись" value={item.l} onChange={(v) => set({ ...item, l: v })} />
-              </div>
-            )}
-            newItem={() => ({ n: "0", l: "" })}
-          />
-        </Section>
-
-        <Section title="Услуги">
-          <Field
-            label="Подпись"
-            value={content.services.eyebrow}
-            onChange={(v) =>
-              update((d) => {
-                d.services.eyebrow = v;
-              })
-            }
-          />
-          <Field
-            label="Заголовок"
-            polish="title"
-            value={content.services.heading}
-            onChange={(v) =>
-              update((d) => {
-                d.services.heading = v;
-              })
-            }
-          />
-          <div className="text-xs uppercase tracking-widest text-muted-foreground mt-4">
-            Карточки
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label={polishLabel("Подпись")}
+              value={content.about.eyebrow}
+              onChange={(v) =>
+                update((d) => {
+                  d.about.eyebrow = v;
+                })
+              }
+            />
+            <Field
+              label={polishLabel("Заголовок")}
+              polish="title"
+              value={content.about.heading}
+              onChange={(v) =>
+                update((d) => {
+                  d.about.heading = v;
+                })
+              }
+            />
           </div>
-          <ArrayEditor
-            items={content.services.items}
-            onChange={(v) =>
-              update((d) => {
-                d.services.items = v;
-              })
-            }
-            render={(item, set) => (
-              <div className="space-y-2">
-                <div className="grid grid-cols-[100px_1fr] gap-2">
+          <Subsection title={polishLabel("Абзацы")}>
+            <ArrayEditor
+              itemLabel={polishLabel("Абзац")}
+              items={content.about.paragraphs}
+              onChange={(v) =>
+                update((d) => {
+                  d.about.paragraphs = v;
+                })
+              }
+              render={(item, set) => <TextArea label="" value={item} onChange={set} />}
+              newItem={() => ""}
+            />
+          </Subsection>
+          <Subsection title={polishLabel("Цифры")}>
+            <ArrayEditor
+              itemLabel={polishLabel("Показатель")}
+              items={content.about.stats}
+              onChange={(v) =>
+                update((d) => {
+                  d.about.stats = v;
+                })
+              }
+              render={(item, set) => (
+                <div className="grid gap-4 sm:grid-cols-2">
                   <Field
-                    label="№"
+                    label={polishLabel("Число")}
                     polish="none"
                     value={item.n}
                     onChange={(v) => set({ ...item, n: v })}
                   />
                   <Field
-                    label="Заголовок"
-                    polish="title"
-                    value={item.t}
-                    onChange={(v) => set({ ...item, t: v })}
+                    label={polishLabel("Подпись")}
+                    value={item.l}
+                    onChange={(v) => set({ ...item, l: v })}
                   />
                 </div>
-                <TextArea
-                  label="Описание"
-                  value={item.d}
-                  onChange={(v) => set({ ...item, d: v })}
-                />
-                <Field
-                  label="Теги (через запятую)"
-                  polish="none"
-                  value={item.tags.join(", ")}
-                  onChange={(v) =>
-                    set({
-                      ...item,
-                      tags: v
-                        .split(",")
-                        .map((s) => s.trim())
-                        .filter(Boolean),
-                    })
-                  }
-                />
-              </div>
-            )}
-            newItem={() => ({ n: "04", t: "", d: "", tags: [] })}
-          />
+              )}
+              newItem={() => ({ n: "0", l: "" })}
+            />
+          </Subsection>
         </Section>
 
-        <Section title="Портфолио (видео)">
-          <Field
-            label="Подпись"
-            value={content.portfolio.eyebrow}
-            onChange={(v) =>
-              update((d) => {
-                d.portfolio.eyebrow = v;
-              })
-            }
-          />
-          <Field
-            label="Заголовок"
-            polish="title"
-            value={content.portfolio.heading}
-            onChange={(v) =>
-              update((d) => {
-                d.portfolio.heading = v;
-              })
-            }
-          />
-          <div className="text-xs uppercase tracking-widest text-muted-foreground mt-4">Видео</div>
-          <ArrayEditor<PortfolioVideo>
-            items={content.portfolio.videos}
-            onChange={(v) =>
-              update((d) => {
-                d.portfolio.videos = v;
-              })
-            }
-            render={(item, set) => (
-              <div className="space-y-2">
-                <Field
-                  label="Название"
-                  polish="title"
-                  value={item.title}
-                  onChange={(v) => set({ ...item, title: v })}
-                />
-                <TextArea
-                  label="Описание"
-                  value={item.desc}
-                  onChange={(v) => set({ ...item, desc: v })}
-                />
-                <label className="block">
-                  <div className="text-xs uppercase tracking-widest text-muted-foreground mb-1.5">
-                    Источник
+        <Section title={polishLabel("Услуги")}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label={polishLabel("Подпись")}
+              value={content.services.eyebrow}
+              onChange={(v) =>
+                update((d) => {
+                  d.services.eyebrow = v;
+                })
+              }
+            />
+            <Field
+              label={polishLabel("Заголовок")}
+              polish="title"
+              value={content.services.heading}
+              onChange={(v) =>
+                update((d) => {
+                  d.services.heading = v;
+                })
+              }
+            />
+          </div>
+          <Subsection title={polishLabel("Карточки")}>
+            <ArrayEditor
+              itemLabel={polishLabel("Услуга")}
+              items={content.services.items}
+              onChange={(v) =>
+                update((d) => {
+                  d.services.items = v;
+                })
+              }
+              render={(item, set) => (
+                <div className="space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-[100px_1fr]">
+                    <Field
+                      label={polishLabel("№")}
+                      polish="none"
+                      value={item.n}
+                      onChange={(v) => set({ ...item, n: v })}
+                    />
+                    <Field
+                      label={polishLabel("Заголовок")}
+                      polish="title"
+                      value={item.t}
+                      onChange={(v) => set({ ...item, t: v })}
+                    />
                   </div>
-                  <select
-                    value={item.source}
-                    onChange={(e) =>
+                  <TextArea
+                    label={polishLabel("Описание")}
+                    value={item.d}
+                    onChange={(v) => set({ ...item, d: v })}
+                  />
+                  <Field
+                    label={polishLabel("Теги")}
+                    hint={polishLabel("Через запятую")}
+                    polish="none"
+                    value={item.tags.join(", ")}
+                    onChange={(v) =>
                       set({
                         ...item,
-                        source: e.target.value as PortfolioVideo["source"],
-                        url: e.target.value === "file" ? "" : item.url,
+                        tags: v
+                          .split(",")
+                          .map((s) => s.trim())
+                          .filter(Boolean),
                       })
                     }
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/60"
-                  >
-                    <option value="file">Файл (загрузка) — без ограничений YouTube</option>
-                    <option value="youtube">YouTube</option>
-                    <option value="vk">VK</option>
-                  </select>
-                </label>
-                {item.source === "youtube" ? (
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    YouTube может показать «войдите, чтобы подтвердить» — это их антибот, обойти
-                    полностью нельзя. Надёжнее: загрузите свой файл (MP4) или откройте ролик кнопкой
-                    «Смотреть на YouTube» на сайте. В YouTube Studio у ролика должно быть разрешено
-                    встраивание.
-                  </p>
-                ) : null}
-                {item.source === "file" ? (
-                  <VideoFileEditor
-                    video={item}
-                    onChange={(url) => set({ ...item, url, source: "file" })}
                   />
-                ) : (
-                  <Field
-                    label={item.source === "vk" ? "VK ссылка (embed)" : "YouTube ссылка"}
-                    polish="none"
-                    value={item.url}
-                    onChange={(v) => set({ ...item, url: v })}
-                    placeholder={
-                      item.source === "vk"
-                        ? "https://vk.com/video_ext.php?oid=...&id=...&hash=..."
-                        : "https://www.youtube.com/watch?v=..."
-                    }
-                  />
-                )}
-                <VideoCoverEditor
-                  video={item}
-                  onChange={(coverUrl) => set({ ...item, coverUrl })}
-                />
-                <Field
-                  label="Теги (через запятую)"
-                  polish="none"
-                  value={item.tags.join(", ")}
-                  onChange={(v) =>
-                    set({
-                      ...item,
-                      tags: v
-                        .split(",")
-                        .map((s) => s.trim())
-                        .filter(Boolean),
-                    })
-                  }
-                />
-              </div>
-            )}
-            newItem={() => ({
-              title: "Новое видео",
-              desc: "Краткое описание для карточки портфолио",
-              tags: ["Live"],
-              source: "file" as const,
-              url: "",
-              coverUrl: "",
-            })}
-          />
+                </div>
+              )}
+              newItem={() => ({ n: "04", t: "", d: "", tags: [] })}
+            />
+          </Subsection>
         </Section>
 
-        <Section title="Опыт">
-          <Field
-            label="Подпись"
-            value={content.experience.eyebrow}
-            onChange={(v) =>
-              update((d) => {
-                d.experience.eyebrow = v;
-              })
-            }
-          />
-          <Field
-            label="Заголовок"
-            polish="title"
-            value={content.experience.heading}
-            onChange={(v) =>
-              update((d) => {
-                d.experience.heading = v;
-              })
-            }
-          />
+        <Section
+          title={polishLabel("Портфолио (видео)")}
+          description={polishLabel(
+            "Каждая карточка — ролик в карусели. Сначала название и источник, затем файл или ссылка.",
+          )}
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label={polishLabel("Подпись")}
+              value={content.portfolio.eyebrow}
+              onChange={(v) =>
+                update((d) => {
+                  d.portfolio.eyebrow = v;
+                })
+              }
+            />
+            <Field
+              label={polishLabel("Заголовок")}
+              polish="title"
+              value={content.portfolio.heading}
+              onChange={(v) =>
+                update((d) => {
+                  d.portfolio.heading = v;
+                })
+              }
+            />
+          </div>
+          <Subsection title={polishLabel("Видео")}>
+            <ArrayEditor<PortfolioVideo>
+              itemLabel={polishLabel("Видео")}
+              items={content.portfolio.videos}
+              onChange={(v) =>
+                update((d) => {
+                  d.portfolio.videos = v;
+                })
+              }
+              render={(item, set) => (
+                <div className="space-y-4">
+                  <Field
+                    label={polishLabel("Название")}
+                    polish="title"
+                    value={item.title}
+                    onChange={(v) => set({ ...item, title: v })}
+                  />
+                  <TextArea
+                    label={polishLabel("Описание")}
+                    value={item.desc}
+                    onChange={(v) => set({ ...item, desc: v })}
+                  />
+                  <SegmentedControl
+                    label={polishLabel("Источник")}
+                    value={item.source}
+                    options={[
+                      { value: "file", label: polishLabel("Файл") },
+                      { value: "youtube", label: "YouTube" },
+                      { value: "vk", label: "VK" },
+                    ]}
+                    onChange={(source) => {
+                      if (source === item.source) return;
+                      set({
+                        ...item,
+                        source,
+                        url:
+                          source === "file" || item.source === "file" ? "" : item.url,
+                      });
+                    }}
+                  />
+                  {item.source === "youtube" ? (
+                    <StatusMessage tone="info">
+                      {polishLabel(
+                        "YouTube иногда показывает антибот-экран. Надёжнее загрузить свой MP4 или оставить кнопку «Смотреть на YouTube».",
+                      )}
+                    </StatusMessage>
+                  ) : null}
+                  {item.source === "file" ? (
+                    <VideoFileEditor
+                      video={item}
+                      onChange={(url) => set({ ...item, url, source: "file" })}
+                    />
+                  ) : (
+                    <Field
+                      label={
+                        item.source === "vk"
+                          ? polishLabel("Ссылка VK (embed)")
+                          : polishLabel("Ссылка YouTube")
+                      }
+                      polish="none"
+                      value={item.url}
+                      onChange={(v) => set({ ...item, url: v })}
+                      placeholder={
+                        item.source === "vk"
+                          ? "https://vk.com/video_ext.php?oid=...&id=...&hash=..."
+                          : "https://www.youtube.com/watch?v=..."
+                      }
+                    />
+                  )}
+                  <VideoCoverEditor
+                    video={item}
+                    onChange={(coverUrl) => set({ ...item, coverUrl })}
+                  />
+                  <Field
+                    label={polishLabel("Теги")}
+                    hint={polishLabel("Через запятую")}
+                    polish="none"
+                    value={item.tags.join(", ")}
+                    onChange={(v) =>
+                      set({
+                        ...item,
+                        tags: v
+                          .split(",")
+                          .map((s) => s.trim())
+                          .filter(Boolean),
+                      })
+                    }
+                  />
+                </div>
+              )}
+              newItem={() => ({
+                title: "Новое видео",
+                desc: "Краткое описание для карточки портфолио",
+                tags: ["Live"],
+                source: "file" as const,
+                url: "",
+                coverUrl: "",
+              })}
+            />
+          </Subsection>
+        </Section>
+
+        <Section title={polishLabel("Опыт")}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label={polishLabel("Подпись")}
+              value={content.experience.eyebrow}
+              onChange={(v) =>
+                update((d) => {
+                  d.experience.eyebrow = v;
+                })
+              }
+            />
+            <Field
+              label={polishLabel("Заголовок")}
+              polish="title"
+              value={content.experience.heading}
+              onChange={(v) =>
+                update((d) => {
+                  d.experience.heading = v;
+                })
+              }
+            />
+          </div>
           <ArrayEditor
+            itemLabel={polishLabel("Запись")}
             items={content.experience.items}
             onChange={(v) =>
               update((d) => {
@@ -595,21 +759,21 @@ function AdminPage() {
               })
             }
             render={(item, set) => (
-              <div className="grid grid-cols-[100px_1fr_1fr] gap-2">
+              <div className="grid gap-4 sm:grid-cols-[110px_1fr_1fr]">
                 <Field
-                  label="Год"
+                  label={polishLabel("Год")}
                   polish="none"
                   value={item.y}
                   onChange={(v) => set({ ...item, y: v })}
                 />
                 <Field
-                  label="Название"
+                  label={polishLabel("Название")}
                   polish="title"
                   value={item.t}
                   onChange={(v) => set({ ...item, t: v })}
                 />
                 <Field
-                  label="Описание"
+                  label={polishLabel("Описание")}
                   polish="body"
                   value={item.d}
                   onChange={(v) => set({ ...item, d: v })}
@@ -620,28 +784,30 @@ function AdminPage() {
           />
         </Section>
 
-        <Section title="Контакты">
-          <Field
-            label="Подпись"
-            value={content.contact.eyebrow}
-            onChange={(v) =>
-              update((d) => {
-                d.contact.eyebrow = v;
-              })
-            }
-          />
-          <Field
-            label="Заголовок"
-            polish="title"
-            value={content.contact.heading}
-            onChange={(v) =>
-              update((d) => {
-                d.contact.heading = v;
-              })
-            }
-          />
+        <Section title={polishLabel("Контакты")}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label={polishLabel("Подпись")}
+              value={content.contact.eyebrow}
+              onChange={(v) =>
+                update((d) => {
+                  d.contact.eyebrow = v;
+                })
+              }
+            />
+            <Field
+              label={polishLabel("Заголовок")}
+              polish="title"
+              value={content.contact.heading}
+              onChange={(v) =>
+                update((d) => {
+                  d.contact.heading = v;
+                })
+              }
+            />
+          </div>
           <TextArea
-            label="Описание"
+            label={polishLabel("Описание")}
             value={content.contact.description}
             onChange={(v) =>
               update((d) => {
@@ -649,63 +815,57 @@ function AdminPage() {
               })
             }
           />
-          <Field
-            label="Email"
-            polish="none"
-            value={content.contact.email}
-            onChange={(v) =>
-              update((d) => {
-                d.contact.email = v;
-              })
-            }
-          />
-          <Field
-            label="Телефон"
-            polish="none"
-            value={content.contact.phone}
-            onChange={(v) =>
-              update((d) => {
-                d.contact.phone = v;
-              })
-            }
-          />
-          <div className="text-xs uppercase tracking-widest text-muted-foreground mt-4">
-            Соцсети
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label="Email"
+              polish="none"
+              value={content.contact.email}
+              onChange={(v) =>
+                update((d) => {
+                  d.contact.email = v;
+                })
+              }
+            />
+            <Field
+              label={polishLabel("Телефон")}
+              polish="none"
+              value={content.contact.phone}
+              onChange={(v) =>
+                update((d) => {
+                  d.contact.phone = v;
+                })
+              }
+            />
           </div>
-          <p className="text-sm text-muted-foreground -mt-2">
-            Показываются в блоке «Контакты» и в мобильном меню. Пустая ссылка скрывает сеть на
-            сайте.
-          </p>
-          <SocialsEditor
-            items={content.contact.socials}
-            onChange={(v) =>
-              update((d) => {
-                d.contact.socials = v;
-              })
-            }
-          />
+          <Subsection title={polishLabel("Соцсети")}>
+            <p className="text-sm text-muted-foreground">
+              {polishLabel(
+                "Показываются в блоке «Контакты» и в мобильном меню. Пустая ссылка скрывает сеть на сайте.",
+              )}
+            </p>
+            <SocialsEditor
+              items={content.contact.socials}
+              onChange={(v) =>
+                update((d) => {
+                  d.contact.socials = v;
+                })
+              }
+            />
+          </Subsection>
         </Section>
 
-        <div className="pb-20 flex justify-end">
-          <button
+        <div className="flex justify-end pb-16">
+          <Button
+            type="button"
             onClick={save}
             disabled={saving}
-            className="rounded-full bg-ember px-8 py-3.5 font-medium text-primary-foreground shadow-glow disabled:opacity-50"
+            className="h-11 rounded-full bg-ember px-8 text-primary-foreground shadow-glow hover:bg-ember/90"
           >
-            {saving ? "Сохранение..." : "Сохранить все изменения"}
-          </button>
+            {saving ? polishLabel("Сохранение…") : polishLabel("Сохранить все изменения")}
+          </Button>
         </div>
       </main>
     </div>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="rounded-2xl border border-border bg-card/40 p-6 space-y-4">
-      <h2 className="font-display text-2xl">{title}</h2>
-      <div className="space-y-4">{children}</div>
-    </section>
   );
 }
 
@@ -725,6 +885,48 @@ function readImageDimensions(file: File): Promise<{ width: number; height: numbe
   });
 }
 
+function ArrayEditor<T>({
+  items,
+  onChange,
+  render,
+  newItem,
+  itemLabel = polishLabel("Элемент"),
+  addLabel = polishLabel("Добавить"),
+}: {
+  items: T[];
+  onChange: (v: T[]) => void;
+  render: (item: T, set: (v: T) => void) => React.ReactNode;
+  newItem: () => T;
+  itemLabel?: string;
+  addLabel?: string;
+}) {
+  return (
+    <div className="space-y-3">
+      {items.map((item, i) => (
+        <ItemCard
+          key={i}
+          title={`${itemLabel} ${i + 1}`}
+          onRemove={() => onChange(items.filter((_, j) => j !== i))}
+        >
+          {render(item, (v) => {
+            const copy = [...items];
+            copy[i] = v;
+            onChange(copy);
+          })}
+        </ItemCard>
+      ))}
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => onChange([...items, newItem()])}
+        className="h-10 w-full border-dashed border-border/80 bg-transparent text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-foreground"
+      >
+        + {addLabel}
+      </Button>
+    </div>
+  );
+}
+
 function VideoFileEditor({
   video,
   onChange,
@@ -734,7 +936,7 @@ function VideoFileEditor({
 }) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
+  const { timeline, uploading, runUpload, clearTimeline } = useUploadTimeline();
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const hasFile = Boolean(video.url.trim());
@@ -746,8 +948,9 @@ function VideoFileEditor({
 
     setError(null);
     setInfo(null);
+    clearTimeline();
 
-    if (!VIDEO_FILE_TYPES.has(file.type)) {
+    if (!VIDEO_FILE_TYPES.has(file.type) && !/\.(mp4|m4v|webm|mov)$/i.test(file.name)) {
       setError("Формат видео: MP4, WebM или MOV.");
       return;
     }
@@ -757,65 +960,101 @@ function VideoFileEditor({
     }
 
     try {
-      setUploading(true);
-      const publicUrl = await uploadSiteMedia(file, { kind: "video", folder: "portfolio/videos" });
-      onChange(publicUrl);
-      setInfo("Видео загружено. Не забудьте нажать «Сохранить».");
+      const result = await runUpload(file, {
+        kind: "video",
+        folder: "portfolio/videos",
+      });
+      onChange(result.url);
+      const sizeMb = (result.size / (1024 * 1024)).toFixed(1);
+      const base = result.remuxed
+        ? `Видео оптимизировано для веба и загружено (${sizeMb} МБ).`
+        : `Видео загружено (${sizeMb} МБ).`;
+      const warn = result.warning ? ` ${result.warning}` : "";
+      setInfo(`${base}${warn} Не забудьте нажать «Сохранить».`);
     } catch (err: unknown) {
       setError(errorMessage(err, "Ошибка загрузки"));
-    } finally {
-      setUploading(false);
     }
   }
 
   return (
-    <div className="space-y-2 rounded-lg border border-border/60 bg-background/40 p-3">
-      <div className="text-xs uppercase tracking-widest text-muted-foreground">Видеофайл</div>
+    <MediaPanel title={polishLabel("Видеофайл")}>
       <p className="text-sm text-muted-foreground">
         {hasFile
-          ? "Файл загружен на Vercel Blob. На сайте откроется плеер."
-          : "Загрузите ролик с компьютера (MP4 / WebM / MOV, до 200 МБ)."}
+          ? polishLabel("Файл на сервере — на сайте откроется свой плеер.")
+          : polishLabel("MP4 (H.264 + AAC), WebM или MOV. Рекомендуем до 100 МБ, максимум 200 МБ.")}
       </p>
-      {hasFile && (
-        <p className="truncate text-xs text-primary" title={video.url}>
-          {video.url}
-        </p>
-      )}
-      <div className="flex flex-wrap items-center gap-3 pt-1">
+      <p className="text-xs text-muted-foreground">
+        {polishLabel(
+          "Перед загрузкой файл автоматически готовится для веба (faststart), чтобы плеер не зависал на 0:00.",
+        )}
+      </p>
+
+      {hasFile ? (
+        <div className="space-y-3">
+          <FileMeta name={fileNameFromUrl(video.url)} url={video.url} />
+          <div className="overflow-hidden rounded-lg border border-border/70 bg-black">
+            <video
+              key={video.url}
+              src={video.url}
+              controls
+              playsInline
+              preload="metadata"
+              className="aspect-video max-h-56 w-full"
+            />
+          </div>
+        </div>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-2">
         <input
           ref={inputRef}
           id={inputId}
           type="file"
-          accept="video/mp4,video/webm,video/quicktime"
+          accept="video/mp4,video/webm,video/quicktime,video/x-m4v,.mp4,.m4v,.webm,.mov"
           className="sr-only"
           onChange={onFileChange}
         />
-        <button
+        <Button
           type="button"
           disabled={uploading}
           onClick={() => inputRef.current?.click()}
-          className="rounded-full bg-ember px-4 py-2 text-sm font-medium text-primary-foreground shadow-glow disabled:opacity-50"
+          className="h-9 rounded-full bg-ember px-4 text-primary-foreground shadow-glow hover:bg-ember/90"
         >
-          {uploading ? "Загрузка..." : hasFile ? "Заменить видео" : "Загрузить видео"}
-        </button>
-        {hasFile && (
-          <button
+          {uploading ? (
+            <>
+              <Loader2 className="size-3.5 animate-spin" />
+              {polishLabel("Загрузка…")}
+            </>
+          ) : (
+            <>
+              <Upload className="size-3.5" />
+              {hasFile ? polishLabel("Заменить видео") : polishLabel("Загрузить видео")}
+            </>
+          )}
+        </Button>
+        {hasFile ? (
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             disabled={uploading}
             onClick={() => {
               onChange("");
+              clearTimeline();
               setError(null);
               setInfo("Видео убрано. Нажмите «Сохранить».");
             }}
-            className="text-sm text-muted-foreground hover:text-foreground"
+            className="text-muted-foreground hover:text-red-400"
           >
-            Удалить файл
-          </button>
-        )}
+            {polishLabel("Удалить файл")}
+          </Button>
+        ) : null}
       </div>
-      {error && <p className="text-sm text-red-400">{error}</p>}
-      {!error && info && <p className="text-sm text-primary">{info}</p>}
-    </div>
+
+      {timeline ? <UploadTimelineLoader state={timeline} /> : null}
+      {error && !timeline ? <StatusMessage tone="error">{error}</StatusMessage> : null}
+      {!error && info ? <StatusMessage tone="success">{info}</StatusMessage> : null}
+    </MediaPanel>
   );
 }
 
@@ -828,7 +1067,7 @@ function AboutPortraitEditor({
 }) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
+  const { timeline, uploading, runUpload, clearTimeline } = useUploadTimeline();
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
@@ -842,6 +1081,7 @@ function AboutPortraitEditor({
 
     setError(null);
     setInfo(null);
+    clearTimeline();
 
     if (!ABOUT_IMAGE_ALLOWED_TYPES.has(file.type)) {
       setError("Формат: JPEG, PNG или WebP.");
@@ -872,27 +1112,20 @@ function AboutPortraitEditor({
         setInfo(`Загружено ${width}×${height}. Не забудьте нажать «Сохранить».`);
       }
 
-      setUploading(true);
-      const publicUrl = await uploadSiteMedia(file, { kind: "image", folder: "about" });
+      const publicUrl = (await runUpload(file, { kind: "image", folder: "about" })).url;
       onChange(publicUrl);
     } catch (err: unknown) {
       setError(errorMessage(err, "Ошибка загрузки"));
-    } finally {
-      setUploading(false);
     }
   }
 
   return (
-    <div className="space-y-4 rounded-xl border border-border/70 bg-background/50 p-4">
-      <div className="text-xs uppercase tracking-widest text-muted-foreground">
-        Фото в блоке «Обо мне»
-      </div>
-
-      <div className="grid gap-5 sm:grid-cols-[140px_1fr]">
-        <div className="relative mx-auto aspect-[4/5] w-[140px] overflow-hidden rounded-xl border border-border bg-muted/20 sm:mx-0">
+    <MediaPanel title={polishLabel("Фото в блоке «Обо мне»")}>
+      <div className="grid gap-5 sm:grid-cols-[132px_1fr]">
+        <div className="relative mx-auto aspect-[4/5] w-[132px] overflow-hidden rounded-xl border border-border bg-muted/20 sm:mx-0">
           <img
             src={displaySrc}
-            alt="Превью портрета"
+            alt={polishLabel("Превью портрета")}
             className="h-full w-full object-cover object-[center_28%]"
           />
         </div>
@@ -900,35 +1133,25 @@ function AboutPortraitEditor({
         <div className="space-y-3 text-sm text-muted-foreground">
           <p className="text-foreground">
             {isCustom
-              ? "Сейчас на сайте — загруженное фото."
-              : "Сейчас на сайте — фото по умолчанию."}
+              ? polishLabel("Сейчас на сайте — загруженное фото.")
+              : polishLabel("Сейчас на сайте — фото по умолчанию.")}
           </p>
-          <ul className="list-disc space-y-1.5 pl-4 leading-relaxed">
+          <ul className="grid list-disc gap-1 pl-4 text-xs leading-relaxed sm:grid-cols-2 sm:gap-x-6">
             <li>
-              <span className="text-foreground">Формат:</span> JPEG, PNG или WebP
+              <span className="text-foreground">JPEG / PNG / WebP</span>
             </li>
             <li>
-              <span className="text-foreground">Соотношение сторон:</span> 4:5 (портрет), например{" "}
-              <span className="text-foreground">1024×1536</span> или{" "}
-              <span className="text-foreground">1200×1500</span>
+              <span className="text-foreground">4:5</span>, от {ABOUT_IMAGE_MIN_WIDTH} px
             </li>
             <li>
-              <span className="text-foreground">Минимум:</span> ширина от {ABOUT_IMAGE_MIN_WIDTH} px
+              <span className="text-foreground">Рекомендуемо:</span> 1024×1536
             </li>
             <li>
-              <span className="text-foreground">Рекомендуемо:</span> 1024×1536 px (как текущий
-              портрет)
-            </li>
-            <li>
-              <span className="text-foreground">Вес файла:</span> до 5 МБ
-            </li>
-            <li>
-              Лицо и верх тела — ближе к верхней трети кадра: на сайте кадр чуть обрезается
-              сверху/снизу
+              <span className="text-foreground">До 5 МБ</span>
             </li>
           </ul>
 
-          <div className="flex flex-wrap items-center gap-3 pt-1">
+          <div className="flex flex-wrap items-center gap-2 pt-1">
             <input
               ref={inputRef}
               id={inputId}
@@ -937,35 +1160,49 @@ function AboutPortraitEditor({
               className="sr-only"
               onChange={onFileChange}
             />
-            <button
+            <Button
               type="button"
               disabled={uploading}
               onClick={() => inputRef.current?.click()}
-              className="rounded-full bg-ember px-4 py-2 text-sm font-medium text-primary-foreground shadow-glow disabled:opacity-50"
+              className="h-9 rounded-full bg-ember px-4 text-primary-foreground shadow-glow hover:bg-ember/90"
             >
-              {uploading ? "Загрузка..." : "Загрузить фото"}
-            </button>
-            {isCustom && (
-              <button
+              {uploading ? (
+                <>
+                  <Loader2 className="size-3.5 animate-spin" />
+                  {polishLabel("Загрузка…")}
+                </>
+              ) : (
+                <>
+                  <Upload className="size-3.5" />
+                  {polishLabel("Загрузить фото")}
+                </>
+              )}
+            </Button>
+            {isCustom ? (
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 disabled={uploading}
                 onClick={() => {
                   onChange("");
+                  clearTimeline();
                   setError(null);
                   setInfo("Вернули фото по умолчанию. Нажмите «Сохранить».");
                 }}
-                className="text-sm text-muted-foreground hover:text-foreground"
+                className="text-muted-foreground"
               >
-                Сбросить на стандартное
-              </button>
-            )}
+                {polishLabel("Сбросить")}
+              </Button>
+            ) : null}
           </div>
 
-          {error && <p className="text-sm text-red-400">{error}</p>}
-          {!error && info && <p className="text-sm text-primary">{info}</p>}
+          {timeline ? <UploadTimelineLoader state={timeline} /> : null}
+          {error && !timeline ? <StatusMessage tone="error">{error}</StatusMessage> : null}
+          {!error && info ? <StatusMessage tone="success">{info}</StatusMessage> : null}
         </div>
       </div>
-    </div>
+    </MediaPanel>
   );
 }
 
@@ -978,7 +1215,7 @@ function VideoCoverEditor({
 }) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
+  const { timeline, uploading, runUpload, clearTimeline } = useUploadTimeline();
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
@@ -986,9 +1223,9 @@ function VideoCoverEditor({
   const displaySrc = resolvePortfolioCover(video, FALLBACK_COVER);
   const isCustom = Boolean(video.coverUrl.trim());
 
-  let sourceLabel = "запасная обложка сайта";
-  if (isCustom) sourceLabel = "загруженная обложка";
-  else if (autoThumb) sourceLabel = "превью YouTube";
+  let sourceLabel = polishLabel("запасная обложка сайта");
+  if (isCustom) sourceLabel = polishLabel("загруженная обложка");
+  else if (autoThumb) sourceLabel = polishLabel("превью YouTube");
 
   async function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -997,6 +1234,7 @@ function VideoCoverEditor({
 
     setError(null);
     setInfo(null);
+    clearTimeline();
 
     if (!COVER_IMAGE_ALLOWED_TYPES.has(file.type)) {
       setError("Формат: JPEG, PNG или WebP.");
@@ -1026,43 +1264,34 @@ function VideoCoverEditor({
         setInfo(`Загружено ${width}×${height}. Не забудьте нажать «Сохранить».`);
       }
 
-      setUploading(true);
-      const publicUrl = await uploadSiteMedia(file, { kind: "image", folder: "portfolio" });
+      const publicUrl = (await runUpload(file, { kind: "image", folder: "portfolio" })).url;
       onChange(publicUrl);
     } catch (err: unknown) {
       setError(errorMessage(err, "Ошибка загрузки"));
-    } finally {
-      setUploading(false);
     }
   }
 
   return (
-    <div className="space-y-3 rounded-lg border border-border/60 bg-background/40 p-3">
-      <div className="text-xs uppercase tracking-widest text-muted-foreground">
-        Обложка в карусели
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-[160px_1fr]">
-        <div className="relative mx-auto aspect-video w-full max-w-[160px] overflow-hidden rounded-lg border border-border bg-muted/20 sm:mx-0">
-          <img src={displaySrc} alt="Превью обложки" className="h-full w-full object-cover" />
+    <MediaPanel title={polishLabel("Обложка в карусели")}>
+      <div className="grid gap-4 sm:grid-cols-[168px_1fr]">
+        <div className="relative mx-auto aspect-video w-full max-w-[168px] overflow-hidden rounded-lg border border-border bg-muted/20 sm:mx-0">
+          <img
+            src={displaySrc}
+            alt={polishLabel("Превью обложки")}
+            className="h-full w-full object-cover"
+          />
         </div>
 
-        <div className="space-y-2 text-sm text-muted-foreground">
-          <p className="text-foreground">Сейчас: {sourceLabel}.</p>
-          <p className="text-xs leading-relaxed">
-            Картинка для превью карточки в карусели. Лучше горизонтальный кадр{" "}
-            <span className="text-foreground">16:9</span> — например{" "}
-            <span className="text-foreground">1280×720</span> или{" "}
-            <span className="text-foreground">1920×1080</span> px. Форматы: JPEG, PNG или WebP,
-            ширина от {COVER_IMAGE_MIN_WIDTH} px, вес до 5 МБ. Важный сюжет держите ближе к центру:
-            края могут чуть обрезаться.
+        <div className="space-y-3 text-sm text-muted-foreground">
+          <p className="text-foreground">
+            {polishLabel("Сейчас:")} {sourceLabel}.
           </p>
           <p className="text-xs leading-relaxed">
-            Если обложку не загружать: для YouTube подставится превью ролика, для VK — запасная
-            картинка сайта.
+            {polishLabel("Лучше 16:9")} — 1280×720 или 1920×1080, JPEG/PNG/WebP, от{" "}
+            {COVER_IMAGE_MIN_WIDTH} px, до 5 МБ.
           </p>
 
-          <div className="flex flex-wrap items-center gap-3 pt-1">
+          <div className="flex flex-wrap items-center gap-2">
             <input
               ref={inputRef}
               id={inputId}
@@ -1071,20 +1300,34 @@ function VideoCoverEditor({
               className="sr-only"
               onChange={onFileChange}
             />
-            <button
+            <Button
               type="button"
+              variant="outline"
               disabled={uploading}
               onClick={() => inputRef.current?.click()}
-              className="rounded-full border border-border bg-card px-3 py-1.5 text-sm text-foreground hover:bg-secondary disabled:opacity-50"
+              className="h-9 rounded-full"
             >
-              {uploading ? "Загрузка..." : "Загрузить обложку"}
-            </button>
-            {isCustom && (
-              <button
+              {uploading ? (
+                <>
+                  <Loader2 className="size-3.5 animate-spin" />
+                  {polishLabel("Загрузка…")}
+                </>
+              ) : (
+                <>
+                  <Upload className="size-3.5" />
+                  {polishLabel("Загрузить обложку")}
+                </>
+              )}
+            </Button>
+            {isCustom ? (
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 disabled={uploading}
                 onClick={() => {
                   onChange("");
+                  clearTimeline();
                   setError(null);
                   setInfo(
                     autoThumb
@@ -1092,136 +1335,19 @@ function VideoCoverEditor({
                       : "Сбросили свою обложку. Нажмите «Сохранить».",
                   );
                 }}
-                className="text-sm text-muted-foreground hover:text-foreground"
+                className="text-muted-foreground"
               >
-                Сбросить на авто
-              </button>
-            )}
+                {polishLabel("Сбросить на авто")}
+              </Button>
+            ) : null}
           </div>
 
-          {error && <p className="text-sm text-red-400">{error}</p>}
-          {!error && info && <p className="text-sm text-primary">{info}</p>}
+          {timeline ? <UploadTimelineLoader state={timeline} /> : null}
+          {error && !timeline ? <StatusMessage tone="error">{error}</StatusMessage> : null}
+          {!error && info ? <StatusMessage tone="success">{info}</StatusMessage> : null}
         </div>
       </div>
-    </div>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  placeholder,
-  polish = "label",
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  /** Typography applied on blur (and already on CMS load/save). */
-  polish?: "title" | "body" | "label" | "none";
-}) {
-  const applyPolish = (raw: string) => {
-    if (polish === "none") return raw;
-    if (polish === "title") return polishTitle(raw);
-    if (polish === "body") return polishBody(raw);
-    return polishLabel(raw);
-  };
-
-  return (
-    <label className="block">
-      {label && (
-        <div className="text-xs uppercase tracking-widest text-muted-foreground mb-1.5">
-          {label}
-        </div>
-      )}
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onBlur={() => {
-          const next = applyPolish(value);
-          if (next !== value) onChange(next);
-        }}
-        placeholder={placeholder}
-        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/60"
-      />
-    </label>
-  );
-}
-
-function TextArea({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <label className="block">
-      {label && (
-        <div className="text-xs uppercase tracking-widest text-muted-foreground mb-1.5">
-          {label}
-        </div>
-      )}
-      <textarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onBlur={() => {
-          const next = polishBody(value);
-          if (next !== value) onChange(next);
-        }}
-        rows={3}
-        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/60"
-      />
-    </label>
-  );
-}
-
-function ArrayEditor<T>({
-  items,
-  onChange,
-  render,
-  newItem,
-}: {
-  items: T[];
-  onChange: (v: T[]) => void;
-  render: (item: T, set: (v: T) => void) => React.ReactNode;
-  newItem: () => T;
-}) {
-  return (
-    <div className="space-y-3">
-      {items.map((item, i) => (
-        <div key={i} className="rounded-lg border border-border/70 bg-background/60 p-3">
-          <div className="flex items-start gap-2">
-            <div className="flex-1">
-              {render(item, (v) => {
-                const copy = [...items];
-                copy[i] = v;
-                onChange(copy);
-              })}
-            </div>
-            <button
-              type="button"
-              onClick={() => onChange(items.filter((_, j) => j !== i))}
-              className="text-xs text-red-400 hover:text-red-300 shrink-0 mt-1"
-              aria-label="Удалить"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-      ))}
-      <button
-        type="button"
-        onClick={() => onChange([...items, newItem()])}
-        className="text-sm text-primary hover:opacity-80"
-      >
-        + Добавить
-      </button>
-    </div>
+    </MediaPanel>
   );
 }
 
@@ -1247,54 +1373,47 @@ function SocialsEditor({
           (label) => label.toLowerCase() === item.label.toLowerCase(),
         );
         return (
-          <div key={i} className="rounded-lg border border-border/70 bg-background/60 p-3">
-            <div className="flex items-start gap-2">
-              <div className="flex-1 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {isCore ? (
-                  <div>
-                    <div className="text-xs uppercase tracking-widest text-muted-foreground mb-1.5">
-                      Название
-                    </div>
-                    <div className="rounded-lg border border-border/50 bg-muted/30 px-3 py-2 text-sm">
-                      {item.label}
-                    </div>
+          <ItemCard
+            key={i}
+            title={item.label || polishLabel(`Соцсеть ${i + 1}`)}
+            onRemove={isCore ? undefined : () => onChange(items.filter((_, j) => j !== i))}
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              {isCore ? (
+                <div>
+                  <p className="mb-1.5 text-sm font-medium text-foreground/90">
+                    {polishLabel("Название")}
+                  </p>
+                  <div className="flex h-10 items-center rounded-lg border border-border/50 bg-muted/25 px-3.5 text-sm">
+                    {item.label}
                   </div>
-                ) : (
-                  <Field
-                    label="Название"
-                    value={item.label}
-                    onChange={(v) => setAt(i, { ...item, label: v })}
-                  />
-                )}
+                </div>
+              ) : (
                 <Field
-                  label="Ссылка"
-                  polish="none"
-                  value={item.url}
-                  onChange={(v) => setAt(i, { ...item, url: v })}
-                  placeholder="https://"
+                  label={polishLabel("Название")}
+                  value={item.label}
+                  onChange={(v) => setAt(i, { ...item, label: v })}
                 />
-              </div>
-              {!isCore && (
-                <button
-                  type="button"
-                  onClick={() => onChange(items.filter((_, j) => j !== i))}
-                  className="text-xs text-red-400 hover:text-red-300 shrink-0 mt-1"
-                  aria-label="Удалить"
-                >
-                  ✕
-                </button>
               )}
+              <Field
+                label={polishLabel("Ссылка")}
+                polish="none"
+                value={item.url}
+                onChange={(v) => setAt(i, { ...item, url: v })}
+                placeholder="https://"
+              />
             </div>
-          </div>
+          </ItemCard>
         );
       })}
-      <button
+      <Button
         type="button"
+        variant="outline"
         onClick={() => onChange([...items, { label: "", url: "" }])}
-        className="text-sm text-primary hover:opacity-80"
+        className="h-10 w-full border-dashed border-border/80 bg-transparent text-muted-foreground hover:border-primary/40 hover:bg-primary/5 hover:text-foreground"
       >
-        + Добавить соцсеть
-      </button>
+        + {polishLabel("Добавить соцсеть")}
+      </Button>
     </div>
   );
 }

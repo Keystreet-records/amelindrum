@@ -347,7 +347,7 @@ function normalizePortfolioVideos(incoming?: unknown): PortfolioVideo[] | undefi
           desc,
           tags,
           source: raw.source,
-          url: raw.url,
+          url: raw.url.trim(),
           coverUrl: typeof raw.coverUrl === "string" ? raw.coverUrl.trim() : "",
         } satisfies PortfolioVideo;
       }

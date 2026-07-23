@@ -58,7 +58,19 @@ const siteContentSchema = z.object({
         desc: text,
         tags: z.array(text),
         source: z.enum(["youtube", "vk", "file"]),
-        url: text,
+        url: z.string().superRefine((value, ctx) => {
+          const trimmed = value.trim();
+          if (!trimmed) return;
+          // File uploads must be https Blob/CDN URLs; youtube/vk validated loosely as http(s).
+          try {
+            safeUrlSchema(trimmed);
+          } catch (error) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: error instanceof Error ? error.message : "Недопустимая ссылка на видео",
+            });
+          }
+        }),
         coverUrl: z.string().superRefine((value, ctx) => {
           if (!value.trim()) return;
           try {

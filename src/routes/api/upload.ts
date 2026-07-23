@@ -3,7 +3,7 @@ import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { requireAdminFromRequest } from "@/lib/admin-auth.server";
 
 const IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"] as const;
-const VIDEO_TYPES = ["video/mp4", "video/webm", "video/quicktime"] as const;
+const VIDEO_TYPES = ["video/mp4", "video/webm", "video/quicktime", "video/x-m4v"] as const;
 
 export const Route = createFileRoute("/api/upload")({
   server: {
